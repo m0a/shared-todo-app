@@ -2,9 +2,10 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
-import { users, lists } from './db/schema';
+import { lists } from './db/schema';
+import { createAuthApp, getSessionUserId } from './auth/index';
 
 export { ListRoom } from './do/list-room';
 
@@ -35,33 +36,53 @@ const app = new Hono<{ Bindings: Env }>()
     },
   )
 
-  // ---- 暫定: パスキー認証はフェーズ3で実装。それまでの間、認証なしでリスト作成できる開発用API ----
+  // ---- パスキー認証 ----
+  .route('/api/auth', createAuthApp())
+
+  // ---- リスト管理（作成者のみ・要ログイン） ----
   .post(
-    '/api/dev/lists',
+    '/api/lists',
     zValidator('json', z.object({ title: z.string().min(1).max(100) })),
     async (c) => {
+      const userId = await getSessionUserId(c, c.env.SESSION_SECRET);
+      if (!userId) return c.json({ error: 'unauthorized' }, 401);
       const db = drizzle(c.env.DB);
       const now = Date.now();
-      // 暫定の開発用オーナー（フェーズ3で本物のユーザーに置き換える）
-      const DEV_USER_ID = 'dev-user';
-      await db
-        .insert(users)
-        .values({ id: DEV_USER_ID, displayName: 'Dev User', createdAt: now })
-        .onConflictDoNothing();
-
       const list = {
         id: nanoid(),
         shareToken: nanoid(22),
-        ownerId: DEV_USER_ID,
+        ownerId: userId,
         title: c.req.valid('json').title,
         currentRevision: 0,
         createdAt: now,
         updatedAt: now,
       };
       await db.insert(lists).values(list);
-      return c.json({ shareToken: list.shareToken, title: list.title }, 201);
+      return c.json({ id: list.id, shareToken: list.shareToken, title: list.title }, 201);
     },
   )
+  .get('/api/lists', async (c) => {
+    const userId = await getSessionUserId(c, c.env.SESSION_SECRET);
+    if (!userId) return c.json({ error: 'unauthorized' }, 401);
+    const db = drizzle(c.env.DB);
+    const rows = await db
+      .select({ id: lists.id, shareToken: lists.shareToken, title: lists.title, updatedAt: lists.updatedAt })
+      .from(lists)
+      .where(eq(lists.ownerId, userId))
+      .orderBy(desc(lists.updatedAt));
+    return c.json({ lists: rows });
+  })
+  .delete('/api/lists/:id', async (c) => {
+    const userId = await getSessionUserId(c, c.env.SESSION_SECRET);
+    if (!userId) return c.json({ error: 'unauthorized' }, 401);
+    const db = drizzle(c.env.DB);
+    const [deleted] = await db
+      .delete(lists)
+      .where(and(eq(lists.id, c.req.param('id')), eq(lists.ownerId, userId)))
+      .returning({ id: lists.id });
+    if (!deleted) return c.json({ error: 'not found' }, 404);
+    return c.json({ ok: true });
+  })
 
   // リストメタ取得（共有URL経由・認証不要）
   .get('/api/l/:shareToken', async (c) => {
@@ -81,17 +102,20 @@ const app = new Hono<{ Bindings: Env }>()
     }
     const db = drizzle(c.env.DB);
     const [list] = await db
-      .select({ id: lists.id })
+      .select({ id: lists.id, ownerId: lists.ownerId })
       .from(lists)
       .where(eq(lists.shareToken, c.req.param('shareToken')));
     if (!list) return c.json({ error: 'not found' }, 404);
 
-    // 匿名ユーザーの端末ID（クライアント生成、localStorage保持）をDOへ引き渡す
+    // ログイン済みの作成者なら owner として、それ以外は匿名として接続する
+    const userId = await getSessionUserId(c, c.env.SESSION_SECRET);
+    const isOwner = userId !== null && userId === list.ownerId;
     const anonId = c.req.query('anonId') ?? 'unknown';
+
     const headers = new Headers(c.req.raw.headers);
     headers.set('X-List-Id', list.id);
-    headers.set('X-Actor-Type', 'anon');
-    headers.set('X-Actor-Id', anonId);
+    headers.set('X-Actor-Type', isOwner ? 'owner' : 'anon');
+    headers.set('X-Actor-Id', isOwner ? userId : anonId);
 
     const stub = c.env.LIST_ROOM.get(c.env.LIST_ROOM.idFromName(list.id));
     return stub.fetch(new Request(c.req.raw.url, { headers }));

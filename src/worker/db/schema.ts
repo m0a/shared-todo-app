@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, blob, real, primaryKey, index } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, primaryKey, index } from 'drizzle-orm/sqlite-core';
 
 // 作成者アカウント
 export const users = sqliteTable('users', {
@@ -13,7 +13,8 @@ export const credentials = sqliteTable('credentials', {
   userId: text('user_id')
     .notNull()
     .references(() => users.id),
-  publicKey: blob('public_key', { mode: 'buffer' }).notNull(),
+  // WorkersにはNodeのBufferが無いため、公開鍵はbase64url文字列で保存する
+  publicKey: text('public_key').notNull(),
   counter: integer('counter').notNull().default(0),
   transports: text('transports'), // JSON配列
   createdAt: integer('created_at').notNull(),
