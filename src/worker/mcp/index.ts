@@ -65,18 +65,39 @@ export async function handleMcpRequest(
     return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 1) }] };
   }
 
+  const origin = new URL(c.req.url).origin;
+  const shareUrl = (shareToken: string) => `${origin}/l/${shareToken}`;
+
   const server = new McpServer({ name: 'shared-todo', version: '0.1.0' });
 
   server.registerTool(
     'list_todo_lists',
-    { description: '自分のTodoリスト一覧を取得する', inputSchema: {} },
+    { description: '自分のTodoリスト一覧を取得する（共有URL付き）', inputSchema: {} },
     async () => {
       const rows = await db
         .select({ id: lists.id, title: lists.title, shareToken: lists.shareToken, updatedAt: lists.updatedAt })
         .from(lists)
         .where(eq(lists.ownerId, auth.userId))
         .orderBy(desc(lists.updatedAt));
-      return textResult(rows);
+      return textResult(rows.map(({ shareToken, ...r }) => ({ ...r, shareUrl: shareUrl(shareToken) })));
+    },
+  );
+
+  server.registerTool(
+    'get_share_link',
+    {
+      description:
+        'リストの共有リンクを取得する。このURLを知っている人は誰でも（ログインなしで）リストを閲覧・編集できる。LINE等で共有する用途',
+      inputSchema: { list_id: z.string() },
+    },
+    async ({ list_id }) => {
+      const db2 = drizzle(env.DB);
+      const [list] = await db2
+        .select({ title: lists.title, shareToken: lists.shareToken, ownerId: lists.ownerId })
+        .from(lists)
+        .where(eq(lists.id, list_id));
+      if (!list || list.ownerId !== auth.userId) throw new Error(`list not found: ${list_id}`);
+      return textResult({ title: list.title, shareUrl: shareUrl(list.shareToken) });
     },
   );
 
