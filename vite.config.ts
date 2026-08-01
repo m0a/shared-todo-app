@@ -5,7 +5,8 @@ import { cloudflare } from '@cloudflare/vite-plugin';
 export default defineConfig({
   plugins: [react(), cloudflare()],
   server: {
-    // 他プロジェクトのdevサーバ(5173等)と被らない専用ポート
+    // ヘッドレスマシンのためLAN公開（スマホ等から確認）。ポートは他プロジェクトと被らない専用値
+    host: '0.0.0.0',
     port: 7642,
     strictPort: true,
   },
