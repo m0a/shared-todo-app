@@ -31,7 +31,7 @@
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^6.0.5",
     "drizzle-kit": "^0.31.10",
-    "typescript": "^5.9.3",
+    "typescript": "^7.0.2",
     "vite": "^8.2.0",
     "wrangler": "^4.118.0"
   },
