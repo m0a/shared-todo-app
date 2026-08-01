@@ -203,8 +203,12 @@ export function Home() {
         </button>
         {issuedToken && (
           <div className="token-box">
-            <p>このトークンは今回しか表示されません。コピーして保管してください。</p>
-            <code onClick={() => navigator.clipboard.writeText(issuedToken)}>{issuedToken}</code>
+            <p>
+              このトークンは今回しか表示されません。下のコマンドをコピーして Claude Code に登録してください（タップでコピー）。
+            </p>
+            <code onClick={(e) => navigator.clipboard.writeText((e.target as HTMLElement).textContent ?? '')}>
+              {`claude mcp add --scope user --transport http shared-todo ${location.origin}/api/mcp --header "Authorization: Bearer ${issuedToken}"`}
+            </code>
           </div>
         )}
       </section>
