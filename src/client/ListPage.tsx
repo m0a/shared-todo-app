@@ -213,7 +213,7 @@ export function ListPage({ shareToken }: { shareToken: string }) {
   const dragOrderRef = useRef<string[] | null>(null);
   const rowRefs = useRef(new Map<string, HTMLLIElement>());
 
-  const { title, items, connected, notFound, send } = useListSocket(shareToken, (msg) => {
+  const { title, items, connected, notFound, send, applyLocal } = useListSocket(shareToken, (msg) => {
     // 何か操作が届いた＝リストが更新された
     setUpdatedAt(Date.now());
     // 自分が「Enterで行追加」した項目のエコーが来たらフォーカスを移す
@@ -305,6 +305,8 @@ export function ListPage({ shareToken }: { shareToken: string }) {
         else if (prevItem) position = prevItem.position + 1;
         else if (nextItem) position = nextItem.position - 1;
         if (position !== null && position !== item.position) {
+          // ドロップした位置に即時反映してからサーバへ送る（戻ってから直る、を防ぐ）
+          applyLocal({ type: 'move_item', itemId: item.id, position });
           send({ type: 'move_item', itemId: item.id, position, clientOpId: crypto.randomUUID() });
         }
       }
@@ -359,12 +361,20 @@ export function ListPage({ shareToken }: { shareToken: string }) {
     setShowHistory(false);
   }
 
+  // チェック・削除・色変更はエコーを待たず手元に即反映してから送る
+  function sendOptimistic(msg: ClientMessage) {
+    if (msg.type === 'set_checked') applyLocal({ type: 'set_checked', itemId: msg.itemId, checked: msg.checked });
+    else if (msg.type === 'delete_item') applyLocal({ type: 'delete_item', itemId: msg.itemId });
+    else if (msg.type === 'set_color') applyLocal({ type: 'set_color', itemId: msg.itemId, color: msg.color });
+    send(msg);
+  }
+
   function renderRow(item: Item, draggable = false) {
     return (
       <ItemRow
         key={item.id}
         item={item}
-        send={send}
+        send={sendOptimistic}
         onEnter={(it) => addAfter(it)}
         onBackspaceEmpty={(it) => deleteAndFocusPrev(it)}
         focusRequested={focusId === item.id}

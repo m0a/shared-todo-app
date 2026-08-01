@@ -92,10 +92,15 @@ export function useListSocket(
     wsRef.current?.send(JSON.stringify(msg));
   }, []);
 
-  return { ...state, send };
+  // 楽観的更新: サーバのエコーを待たずに手元へ即反映する（エコーが来ても同じ結果になる）
+  const applyLocal = useCallback((op: Op) => {
+    setState((s) => ({ ...s, items: applyOp(s.items, op) }));
+  }, []);
+
+  return { ...state, send, applyLocal };
 }
 
-type Op = Extract<
+export type Op = Extract<
   ReturnType<typeof serverMessageSchema.parse>,
   { type: 'op' }
 >['op'];
