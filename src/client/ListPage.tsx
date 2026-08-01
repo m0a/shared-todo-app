@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { hc } from 'hono/client';
 import type { AppType } from '../worker/index';
-import { useListSocket } from './useListSocket';
+import { useListSocket, affectedItemIds } from './useListSocket';
 import { ITEM_COLORS, type ItemColor, type Item, type ClientMessage } from '../shared/ws-protocol';
 
 const api = hc<AppType>('/');
@@ -61,6 +61,7 @@ function ItemRow({
   onFocused,
   onDragHandleDown,
   dragging,
+  flashed,
   rowRef,
 }: {
   item: Item;
@@ -71,6 +72,7 @@ function ItemRow({
   onFocused: () => void;
   onDragHandleDown?: (item: Item, e: React.PointerEvent) => void;
   dragging?: boolean;
+  flashed?: boolean;
   rowRef?: (el: HTMLLIElement | null) => void;
 }) {
   const [draft, setDraft] = useState(item.text);
@@ -111,15 +113,19 @@ function ItemRow({
     }, 400);
   }
 
-  const colorStyle = item.color
-    ? { borderLeft: `5px solid ${ITEM_COLORS[item.color]}`, background: `${ITEM_COLORS[item.color]}22` }
-    : undefined;
+  const style: React.CSSProperties = {
+    // View Transitionsで行ごとに移動アニメーションさせるための一意な名前
+    viewTransitionName: `i-${item.id.replace(/[^a-zA-Z0-9_-]/g, '_')}`,
+    ...(item.color
+      ? { borderLeft: `5px solid ${ITEM_COLORS[item.color]}`, background: `${ITEM_COLORS[item.color]}22` }
+      : {}),
+  };
 
   return (
     <li
       ref={rowRef}
-      style={colorStyle}
-      className={`item${item.checked ? ' checked' : ''}${dragging ? ' dragging' : ''}`}
+      style={style}
+      className={`item${item.checked ? ' checked' : ''}${dragging ? ' dragging' : ''}${flashed ? ' flash' : ''}`}
     >
       {onDragHandleDown && (
         <span className="drag-handle" onPointerDown={(e) => onDragHandleDown(item, e)}>
@@ -213,9 +219,25 @@ export function ListPage({ shareToken }: { shareToken: string }) {
   const dragOrderRef = useRef<string[] | null>(null);
   const rowRefs = useRef(new Map<string, HTMLLIElement>());
 
-  const { title, items, connected, notFound, send, applyLocal } = useListSocket(shareToken, (msg) => {
+  const [flashIds, setFlashIds] = useState<ReadonlySet<string>>(new Set());
+
+  const { title, items, connected, notFound, send, applyLocal } = useListSocket(shareToken, (msg, own) => {
     // 何か操作が届いた＝リストが更新された
     setUpdatedAt(Date.now());
+    // 他の人・AIの変更は該当行を一瞬ハイライトして分かるようにする
+    if (!own) {
+      const ids = affectedItemIds(msg.op);
+      if (ids.length > 0) {
+        setFlashIds((prev) => new Set([...prev, ...ids]));
+        setTimeout(() => {
+          setFlashIds((prev) => {
+            const next = new Set(prev);
+            for (const id of ids) next.delete(id);
+            return next;
+          });
+        }, 1300);
+      }
+    }
     // 自分が「Enterで行追加」した項目のエコーが来たらフォーカスを移す
     if (msg.op.type === 'add_item' && msg.clientOpId && msg.clientOpId === pendingFocusOpRef.current) {
       pendingFocusOpRef.current = null;
@@ -381,6 +403,7 @@ export function ListPage({ shareToken }: { shareToken: string }) {
         onFocused={() => setFocusId(null)}
         onDragHandleDown={draggable ? startDrag : undefined}
         dragging={dragId === item.id}
+        flashed={flashIds.has(item.id)}
         rowRef={(el) => {
           if (el) rowRefs.current.set(item.id, el);
           else rowRefs.current.delete(item.id);

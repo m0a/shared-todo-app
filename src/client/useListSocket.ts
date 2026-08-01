@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { flushSync } from 'react-dom';
 import { serverMessageSchema, type ClientMessage, type Item } from '../shared/ws-protocol';
 
 function getAnonId(): string {
@@ -22,9 +23,23 @@ export type ServerOp = Extract<
   { type: 'op' }
 >;
 
+export type Op = ServerOp['op'];
+
+// リモート変更をアニメーションさせる（View Transitions対応ブラウザのみ）
+function applyWithTransition(updater: () => void, animate: boolean) {
+  const d = document as Document & { startViewTransition?: (cb: () => void) => unknown };
+  if (animate && d.startViewTransition) {
+    d.startViewTransition(() => {
+      flushSync(updater);
+    });
+  } else {
+    updater();
+  }
+}
+
 export function useListSocket(
   shareToken: string,
-  onOp?: (msg: ServerOp) => void,
+  onOp?: (msg: ServerOp, own: boolean) => void,
 ) {
   const [state, setState] = useState<ListState>({
     title: '',
@@ -36,6 +51,9 @@ export function useListSocket(
   const revisionRef = useRef(0);
   const onOpRef = useRef(onOp);
   onOpRef.current = onOp;
+  // 自分が送った操作のclientOpId（エコーを「自分の操作」と識別するため）
+  const sentOpsRef = useRef(new Set<string>());
+  const hadSyncRef = useRef(false);
 
   useEffect(() => {
     let disposed = false;
@@ -57,7 +75,12 @@ export function useListSocket(
 
         if (msg.type === 'sync') {
           revisionRef.current = msg.revision;
-          setState((s) => ({ ...s, title: msg.title, items: msg.items }));
+          // 初回同期はアニメーションなし、restore等の再同期はアニメーションあり
+          applyWithTransition(
+            () => setState((s) => ({ ...s, title: msg.title, items: msg.items })),
+            hadSyncRef.current,
+          );
+          hadSyncRef.current = true;
           return;
         }
         if (msg.type === 'error') {
@@ -70,8 +93,10 @@ export function useListSocket(
           return;
         }
         revisionRef.current = msg.revision;
-        setState((s) => ({ ...s, items: applyOp(s.items, msg.op) }));
-        onOpRef.current?.(msg);
+        const own = msg.clientOpId !== null && sentOpsRef.current.delete(msg.clientOpId);
+        // 自分の操作は楽観的更新済みなのでアニメーションしない
+        applyWithTransition(() => setState((s) => ({ ...s, items: applyOp(s.items, msg.op) })), !own);
+        onOpRef.current?.(msg, own);
       };
 
       ws.onclose = () => {
@@ -89,6 +114,9 @@ export function useListSocket(
   }, [shareToken]);
 
   const send = useCallback((msg: ClientMessage) => {
+    if ('clientOpId' in msg && typeof msg.clientOpId === 'string') {
+      sentOpsRef.current.add(msg.clientOpId);
+    }
     wsRef.current?.send(JSON.stringify(msg));
   }, []);
 
@@ -99,11 +127,6 @@ export function useListSocket(
 
   return { ...state, send, applyLocal };
 }
-
-export type Op = Extract<
-  ReturnType<typeof serverMessageSchema.parse>,
-  { type: 'op' }
->['op'];
 
 function applyOp(items: Item[], op: Op): Item[] {
   switch (op.type) {
@@ -127,5 +150,23 @@ function applyOp(items: Item[], op: Op): Item[] {
     }
     case 'reorder':
       return op.items;
+  }
+}
+
+/** opが影響した項目ID（ハイライト表示用） */
+export function affectedItemIds(op: Op): string[] {
+  switch (op.type) {
+    case 'add_item':
+      return [op.item.id];
+    case 'update_item':
+    case 'set_checked':
+    case 'move_item':
+    case 'set_color':
+      return [op.itemId];
+    case 'set_colors':
+      return op.changes.map((c) => c.itemId);
+    case 'delete_item':
+    case 'reorder':
+      return [];
   }
 }

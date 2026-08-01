@@ -556,3 +556,34 @@ li.item {
   color: var(--accent);
   font-weight: 500;
 }
+
+/* リモート変更の可視化 */
+@keyframes item-flash {
+  0% {
+    box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+  100% {
+    box-shadow: inset 0 0 0 999px transparent;
+  }
+}
+
+li.item.flash {
+  animation: item-flash 1.2s ease-out;
+}
+
+/* View Transitions（並び替え・追加・削除の移動アニメーション） */
+::view-transition-group(*) {
+  animation-duration: 280ms;
+  animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none;
+  }
+  li.item.flash {
+    animation: none;
+  }
+}
