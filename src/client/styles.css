@@ -295,3 +295,68 @@ li.item .delete-btn {
   text-align: center;
   padding: 24px;
 }
+
+/* 履歴パネル */
+.history-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+}
+
+.history-panel {
+  background: var(--bg);
+  width: 100%;
+  max-width: 600px;
+  max-height: 75dvh;
+  border-radius: 16px 16px 0 0;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.history-header h2 {
+  font-size: 1.05rem;
+  font-weight: 500;
+}
+
+.history-list {
+  list-style: none;
+}
+
+.history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.history-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.history-desc {
+  font-size: 0.95rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-meta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}

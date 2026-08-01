@@ -72,8 +72,77 @@ export class ListRoom extends DurableObject<Env> {
       return new Response(null, { status: 101, webSocket: client });
     }
 
-    // MCP・REST（restore等）からのミューテーション用HTTPエントリ（フェーズ4/5で拡張）
+    // ---- HTTPエントリ（restore: 作成者のUndo / mutate: MCP等の外部ミューテーション）----
+    const url = new URL(request.url);
+    if (request.method === 'POST' && url.pathname.endsWith('/restore')) {
+      const { seq, actor } = (await request.json()) as { seq: number; actor: WsAttachment };
+      const ok = await this.restore(seq, actor);
+      return Response.json(ok ? { ok: true } : { error: 'revision not found' }, {
+        status: ok ? 200 : 404,
+      });
+    }
+    if (request.method === 'POST' && url.pathname.endsWith('/mutate')) {
+      const { op, actor } = (await request.json()) as { op: unknown; actor: WsAttachment };
+      const parsed = clientMessageSchema.safeParse(op);
+      if (!parsed.success || parsed.data.type === 'resync' || parsed.data.type === 'set_nickname') {
+        return Response.json({ error: 'invalid op' }, { status: 400 });
+      }
+      await this.applyMutation(parsed.data, actor);
+      return Response.json({ ok: true });
+    }
     return new Response('Not found', { status: 404 });
+  }
+
+  /** 指定世代のスナップショットへ復元し、新しい世代として記録・全員へ再同期 */
+  private async restore(seq: number, actor: WsAttachment): Promise<boolean> {
+    const db = this.db();
+    const listId = await this.getListId();
+    const [rev] = await db
+      .select({ snapshot: revisions.snapshot })
+      .from(revisions)
+      .where(and(eq(revisions.listId, listId), eq(revisions.seq, seq)));
+    if (!rev) return false;
+
+    const snapshot = JSON.parse(rev.snapshot) as Item[];
+    const now = Date.now();
+    await db.delete(items).where(eq(items.listId, listId));
+    if (snapshot.length > 0) {
+      await db.insert(items).values(
+        snapshot.map((it) => ({
+          id: it.id,
+          listId,
+          text: it.text,
+          checked: it.checked,
+          position: it.position,
+          createdAt: now,
+          updatedAt: now,
+        })),
+      );
+    }
+
+    const [list] = await db
+      .select({ currentRevision: lists.currentRevision, title: lists.title })
+      .from(lists)
+      .where(eq(lists.id, listId));
+    const revision = (list?.currentRevision ?? 0) + 1;
+    await db.batch([
+      db.update(lists).set({ currentRevision: revision, updatedAt: now }).where(eq(lists.id, listId)),
+      db.insert(revisions).values({
+        listId,
+        seq: revision,
+        opType: 'restore',
+        opDetail: JSON.stringify({ restoredFrom: seq }),
+        actorType: actor.actorType,
+        actorId: actor.actorId,
+        actorName: actor.actorName,
+        snapshot: rev.snapshot,
+        createdAt: now,
+      }),
+    ]);
+
+    // 復元は差分でなく全量同期で全クライアントへ配る
+    this.broadcast({ type: 'sync', revision, title: list?.title ?? '', items: snapshot });
+    return true;
   }
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {

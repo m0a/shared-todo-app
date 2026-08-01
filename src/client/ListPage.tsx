@@ -1,12 +1,80 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
+import { hc } from 'hono/client';
+import type { AppType } from '../worker/index';
 import { useListSocket } from './useListSocket';
 import type { Item } from '../shared/ws-protocol';
+
+const api = hc<AppType>('/');
+
+interface RevisionRow {
+  seq: number;
+  opType: string;
+  opDetail: string | null;
+  actorType: string;
+  actorName: string | null;
+  createdAt: number;
+}
+
+function describeOp(rev: RevisionRow): string {
+  const detail = rev.opDetail ? (JSON.parse(rev.opDetail) as Record<string, unknown>) : {};
+  const text = typeof detail.text === 'string' ? `「${detail.text}」` : '';
+  switch (rev.opType) {
+    case 'add_item':
+      return `${text}を追加`;
+    case 'update_item':
+      return `${text}に変更`;
+    case 'delete_item':
+      return `${text}を削除`;
+    case 'set_checked':
+      return `${text}を${detail.checked ? 'チェック' : 'チェック解除'}`;
+    case 'move_item':
+      return '並び替え';
+    case 'restore':
+      return `世代${detail.restoredFrom}へ復元`;
+    default:
+      return rev.opType;
+  }
+}
+
+function actorLabel(rev: RevisionRow): string {
+  if (rev.actorType === 'ai') return 'AI';
+  return rev.actorName ?? (rev.actorType === 'owner' ? '作成者' : 'ゲスト');
+}
 
 export function ListPage({ shareToken }: { shareToken: string }) {
   const { title, items, connected, notFound, send } = useListSocket(shareToken);
   const [draft, setDraft] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
+  const [isOwner, setIsOwner] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [history, setHistory] = useState<RevisionRow[]>([]);
+
+  useEffect(() => {
+    api.api.l[':shareToken']
+      .$get({ param: { shareToken } })
+      .then(async (res) => {
+        if (res.ok) {
+          const meta = await res.json();
+          setIsOwner(meta.isOwner);
+        }
+      })
+      .catch(() => {});
+  }, [shareToken]);
+
+  async function openHistory() {
+    const res = await api.api.l[':shareToken'].revisions.$get({ param: { shareToken } });
+    if (res.ok) {
+      setHistory((await res.json()).revisions);
+      setShowHistory(true);
+    }
+  }
+
+  async function handleRestore(seq: number) {
+    if (!confirm(`世代${seq}の状態に戻しますか？`)) return;
+    await api.api.l[':shareToken'].restore.$post({ param: { shareToken }, json: { seq } });
+    setShowHistory(false);
+  }
 
   if (notFound) {
     return <p className="error-msg">リストが見つかりません。URLを確認してください。</p>;
@@ -86,9 +154,50 @@ export function ListPage({ shareToken }: { shareToken: string }) {
       <header className="list-header">
         <h1>{title || '…'}</h1>
         <span className={`conn-status${connected ? '' : ' offline'}`}>
+          {isOwner && (
+            <button className="link-btn" onClick={openHistory}>
+              履歴
+            </button>
+          )}
+          {isOwner && '・'}
           {connected ? '同期中' : '再接続中…'}
         </span>
       </header>
+
+      {showHistory && (
+        <div className="history-overlay" onClick={() => setShowHistory(false)}>
+          <div className="history-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="history-header">
+              <h2>変更履歴</h2>
+              <button className="delete-btn" onClick={() => setShowHistory(false)}>
+                ×
+              </button>
+            </div>
+            <ul className="history-list">
+              {history.map((rev) => (
+                <li key={rev.seq} className="history-row">
+                  <div className="history-main">
+                    <span className="history-desc">{describeOp(rev)}</span>
+                    <span className="history-meta">
+                      {actorLabel(rev)}・
+                      {new Date(rev.createdAt).toLocaleString('ja-JP', {
+                        month: 'numeric',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </span>
+                  </div>
+                  <button className="copy-btn" onClick={() => handleRestore(rev.seq)}>
+                    復元
+                  </button>
+                </li>
+              ))}
+              {history.length === 0 && <p className="empty-msg">履歴がありません</p>}
+            </ul>
+          </div>
+        </div>
+      )}
 
       <form className="add-form" onSubmit={handleAdd}>
         <input
