@@ -1,0 +1,41 @@
+{
+  "name": "shared-todo-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "vite build && wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "cf-typegen": "wrangler types",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 migrations apply shared-todo-db --local",
+    "db:migrate": "wrangler d1 migrations apply shared-todo-db --remote"
+  },
+  "dependencies": {
+    "@hono/zod-validator": "^0.9.0",
+    "@simplewebauthn/browser": "^13.3.0",
+    "@simplewebauthn/server": "^13.3.2",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.12.33",
+    "nanoid": "^5.1.6",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.50.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^6.0.5",
+    "drizzle-kit": "^0.31.10",
+    "typescript": "^5.9.3",
+    "vite": "^8.2.0",
+    "wrangler": "^4.118.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
