@@ -53,6 +53,9 @@ function ItemRow({
   onBackspaceEmpty,
   focusRequested,
   onFocused,
+  onDragHandleDown,
+  dragging,
+  rowRef,
 }: {
   item: Item;
   send: (msg: ClientMessage) => void;
@@ -60,6 +63,9 @@ function ItemRow({
   onBackspaceEmpty: (item: Item) => void;
   focusRequested: boolean;
   onFocused: () => void;
+  onDragHandleDown?: (item: Item, e: React.PointerEvent) => void;
+  dragging?: boolean;
+  rowRef?: (el: HTMLLIElement | null) => void;
 }) {
   const [draft, setDraft] = useState(item.text);
   const focusedRef = useRef(false);
@@ -99,7 +105,12 @@ function ItemRow({
   }
 
   return (
-    <li className={`item${item.checked ? ' checked' : ''}`}>
+    <li ref={rowRef} className={`item${item.checked ? ' checked' : ''}${dragging ? ' dragging' : ''}`}>
+      {onDragHandleDown && (
+        <span className="drag-handle" onPointerDown={(e) => onDragHandleDown(item, e)}>
+          ⠿
+        </span>
+      )}
       <input
         type="checkbox"
         checked={item.checked}
@@ -150,6 +161,10 @@ function ItemRow({
 export function ListPage({ shareToken }: { shareToken: string }) {
   const [focusId, setFocusId] = useState<string | null>(null);
   const pendingFocusOpRef = useRef<string | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dragOrder, setDragOrder] = useState<string[] | null>(null);
+  const dragOrderRef = useRef<string[] | null>(null);
+  const rowRefs = useRef(new Map<string, HTMLLIElement>());
 
   const { title, items, connected, notFound, send } = useListSocket(shareToken, (msg) => {
     // 自分が「Enterで行追加」した項目のエコーが来たらフォーカスを移す
@@ -160,6 +175,7 @@ export function ListPage({ shareToken }: { shareToken: string }) {
   });
 
   const [isOwner, setIsOwner] = useState(false);
+  const [createdAt, setCreatedAt] = useState<number | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<RevisionRow[]>([]);
 
@@ -167,7 +183,11 @@ export function ListPage({ shareToken }: { shareToken: string }) {
     api.api.l[':shareToken']
       .$get({ param: { shareToken } })
       .then(async (res) => {
-        if (res.ok) setIsOwner((await res.json()).isOwner);
+        if (res.ok) {
+          const meta = await res.json();
+          setIsOwner(meta.isOwner);
+          setCreatedAt(meta.createdAt);
+        }
       })
       .catch(() => {});
   }, [shareToken]);
@@ -176,8 +196,84 @@ export function ListPage({ shareToken }: { shareToken: string }) {
     return <p className="error-msg">リストが見つかりません。URLを確認してください。</p>;
   }
 
-  const unchecked = items.filter((i) => !i.checked);
+  const uncheckedRaw = items.filter((i) => !i.checked);
+  // ドラッグ中はローカルの並び順で描画する
+  const unchecked = dragOrder
+    ? [...uncheckedRaw].sort((a, b) => dragOrder.indexOf(a.id) - dragOrder.indexOf(b.id))
+    : uncheckedRaw;
   const checked = items.filter((i) => i.checked);
+
+  function startDrag(item: Item, e: React.PointerEvent) {
+    e.preventDefault();
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    const initial = uncheckedRaw.map((i) => i.id);
+    dragOrderRef.current = initial;
+    setDragOrder(initial);
+    setDragId(item.id);
+
+    const move = (ev: PointerEvent) => {
+      const prev = dragOrderRef.current;
+      if (!prev) return;
+      const others = prev.filter((id) => id !== item.id);
+      let idx = others.length;
+      for (let k = 0; k < others.length; k++) {
+        const el = rowRefs.current.get(others[k]!);
+        if (el) {
+          const r = el.getBoundingClientRect();
+          if (ev.clientY < r.top + r.height / 2) {
+            idx = k;
+            break;
+          }
+        }
+      }
+      const next = [...others];
+      next.splice(idx, 0, item.id);
+      dragOrderRef.current = next;
+      setDragOrder(next);
+    };
+
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      const order = dragOrderRef.current;
+      if (order) {
+        const idx = order.indexOf(item.id);
+        const byId = new Map(uncheckedRaw.map((i) => [i.id, i]));
+        const prevItem = idx > 0 ? byId.get(order[idx - 1]!) : undefined;
+        const nextItem = idx < order.length - 1 ? byId.get(order[idx + 1]!) : undefined;
+        let position: number | null = null;
+        if (prevItem && nextItem) position = (prevItem.position + nextItem.position) / 2;
+        else if (prevItem) position = prevItem.position + 1;
+        else if (nextItem) position = nextItem.position - 1;
+        if (position !== null && position !== item.position) {
+          send({ type: 'move_item', itemId: item.id, position, clientOpId: crypto.randomUUID() });
+        }
+      }
+      dragOrderRef.current = null;
+      setDragOrder(null);
+      setDragId(null);
+    };
+
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+  }
+
+  async function handleShare() {
+    const url = location.href;
+    const data = { title, text: `買い物リスト「${title}」`, url };
+    if (navigator.share) {
+      try {
+        await navigator.share(data);
+      } catch {
+        // ユーザーキャンセルは無視
+      }
+    } else {
+      // Web Share API非対応環境はLINEの共有URLへ
+      open(`https://line.me/R/share?text=${encodeURIComponent(`${data.text}\n${url}`)}`, '_blank');
+    }
+  }
 
   function addAfter(item: Item | null) {
     const clientOpId = crypto.randomUUID();
@@ -206,7 +302,7 @@ export function ListPage({ shareToken }: { shareToken: string }) {
     setShowHistory(false);
   }
 
-  function renderRow(item: Item) {
+  function renderRow(item: Item, draggable = false) {
     return (
       <ItemRow
         key={item.id}
@@ -216,6 +312,12 @@ export function ListPage({ shareToken }: { shareToken: string }) {
         onBackspaceEmpty={(it) => deleteAndFocusPrev(it)}
         focusRequested={focusId === item.id}
         onFocused={() => setFocusId(null)}
+        onDragHandleDown={draggable ? startDrag : undefined}
+        dragging={dragId === item.id}
+        rowRef={(el) => {
+          if (el) rowRefs.current.set(item.id, el);
+          else rowRefs.current.delete(item.id);
+        }}
       />
     );
   }
@@ -223,14 +325,39 @@ export function ListPage({ shareToken }: { shareToken: string }) {
   return (
     <div className="container">
       <header className="list-header">
-        <h1>{title || '…'}</h1>
-        <span className={`conn-status${connected ? '' : ' offline'}`}>
+        <div className="title-block">
           {isOwner && (
-            <button className="link-btn" onClick={openHistory}>
-              履歴
-            </button>
+            <a className="back-link" href="/" aria-label="マイリストへ戻る">
+              ←
+            </a>
           )}
-          {isOwner && '・'}
+          <div className="title-texts">
+            <h1>{title || '…'}</h1>
+            {createdAt !== null && (
+              <span className="created-at">
+                {new Date(createdAt).toLocaleDateString('ja-JP', {
+                  year: 'numeric',
+                  month: 'numeric',
+                  day: 'numeric',
+                })}
+                作成
+              </span>
+            )}
+          </div>
+        </div>
+        <span className={`conn-status${connected ? '' : ' offline'}`}>
+          <button className="link-btn" onClick={handleShare}>
+            共有
+          </button>
+          ・
+          {isOwner && (
+            <>
+              <button className="link-btn" onClick={openHistory}>
+                履歴
+              </button>
+              ・
+            </>
+          )}
           {connected ? '同期中' : '再接続中…'}
         </span>
       </header>
@@ -270,7 +397,7 @@ export function ListPage({ shareToken }: { shareToken: string }) {
         </div>
       )}
 
-      <ul className="items">{unchecked.map(renderRow)}</ul>
+      <ul className="items">{unchecked.map((i) => renderRow(i, true))}</ul>
 
       <button className="add-row" onClick={() => addAfter(unchecked.at(-1) ?? null)}>
         ＋ リストに追加
@@ -279,7 +406,7 @@ export function ListPage({ shareToken }: { shareToken: string }) {
       {checked.length > 0 && (
         <section className="checked-section">
           <p className="section-label">チェック済み {checked.length}件</p>
-          <ul className="items">{checked.map(renderRow)}</ul>
+          <ul className="items">{checked.map((i) => renderRow(i))}</ul>
         </section>
       )}
     </div>

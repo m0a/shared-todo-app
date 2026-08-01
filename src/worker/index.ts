@@ -144,12 +144,16 @@ const app = new Hono<{ Bindings: Env }>()
   .get('/api/l/:shareToken', async (c) => {
     const db = drizzle(c.env.DB);
     const [list] = await db
-      .select({ id: lists.id, title: lists.title, ownerId: lists.ownerId })
+      .select({ id: lists.id, title: lists.title, ownerId: lists.ownerId, createdAt: lists.createdAt })
       .from(lists)
       .where(eq(lists.shareToken, c.req.param('shareToken')));
     if (!list) return c.json({ error: 'not found' }, 404);
     const userId = await getSessionUserId(c, c.env.SESSION_SECRET);
-    return c.json({ title: list.title, isOwner: userId !== null && userId === list.ownerId });
+    return c.json({
+      title: list.title,
+      createdAt: list.createdAt,
+      isOwner: userId !== null && userId === list.ownerId,
+    });
   })
 
   // ---- 履歴 / Undo（作成者のみ） ----
