@@ -262,16 +262,15 @@ export function ListPage({ shareToken }: { shareToken: string }) {
 
   async function handleShare() {
     const url = location.href;
-    const data = { title, text: `買い物リスト「${title}」`, url };
     if (navigator.share) {
       try {
-        await navigator.share(data);
+        await navigator.share({ title, text: title, url });
       } catch {
         // ユーザーキャンセルは無視
       }
     } else {
       // Web Share API非対応環境はLINEの共有URLへ
-      open(`https://line.me/R/share?text=${encodeURIComponent(`${data.text}\n${url}`)}`, '_blank');
+      open(`https://line.me/R/share?text=${encodeURIComponent(`${title}\n${url}`)}`, '_blank');
     }
   }
 
