@@ -15,7 +15,9 @@
     "db:migrate": "wrangler d1 migrations apply shared-todo-db --remote"
   },
   "dependencies": {
+    "@hono/mcp": "^0.3.1",
     "@hono/zod-validator": "^0.9.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@simplewebauthn/browser": "^13.3.0",
     "@simplewebauthn/server": "^13.3.2",
     "drizzle-orm": "^0.45.2",

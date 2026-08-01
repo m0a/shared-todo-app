@@ -4,8 +4,9 @@ import { z } from 'zod';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, and, desc } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
-import { lists, revisions, users } from './db/schema';
+import { lists, revisions, users, apiTokens } from './db/schema';
 import { createAuthApp, getSessionUserId } from './auth/index';
+import { handleMcpRequest, verifyApiToken, sha256hex } from './mcp/index';
 
 export { ListRoom } from './do/list-room';
 
@@ -83,6 +84,34 @@ const app = new Hono<{ Bindings: Env }>()
     if (!deleted) return c.json({ error: 'not found' }, 404);
     return c.json({ ok: true });
   })
+
+  // ---- MCP（AIクライアント用。Bearerトークン認証） ----
+  .all('/api/mcp', async (c) => {
+    const auth = await verifyApiToken(c.env, c.req.header('Authorization'));
+    if (!auth) return c.json({ error: 'unauthorized' }, 401);
+    return handleMcpRequest(c, auth);
+  })
+
+  // ---- MCPトークン管理（要ログイン） ----
+  .post(
+    '/api/tokens',
+    zValidator('json', z.object({ label: z.string().min(1).max(50) })),
+    async (c) => {
+      const userId = await getSessionUserId(c, c.env.SESSION_SECRET);
+      if (!userId) return c.json({ error: 'unauthorized' }, 401);
+      const db = drizzle(c.env.DB);
+      const token = `st_${nanoid(40)}`;
+      await db.insert(apiTokens).values({
+        id: nanoid(),
+        userId,
+        tokenHash: await sha256hex(token),
+        label: c.req.valid('json').label,
+        createdAt: Date.now(),
+      });
+      // 平文トークンはこのレスポンスでしか見られない（DBにはハッシュのみ保存）
+      return c.json({ token }, 201);
+    },
+  )
 
   // リストメタ取得（共有URL経由・認証不要。作成者かどうかも返す）
   .get('/api/l/:shareToken', async (c) => {

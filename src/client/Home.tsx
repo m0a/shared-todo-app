@@ -24,6 +24,7 @@ export function Home() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [issuedToken, setIssuedToken] = useState<string | null>(null);
 
   useEffect(() => {
     void refresh();
@@ -119,6 +120,13 @@ export function Home() {
     setMyLists([]);
   }
 
+  async function handleIssueToken() {
+    const label = prompt('トークンの用途（例: Claude Code）');
+    if (!label?.trim()) return;
+    const res = await api.api.tokens.$post({ json: { label: label.trim() } });
+    if (res.ok) setIssuedToken((await res.json()).token);
+  }
+
   if (me === undefined) return null; // 読込中
 
   if (!me) {
@@ -188,6 +196,18 @@ export function Home() {
         ))}
       </ul>
       {myLists.length === 0 && <p className="empty-msg">リストがありません。上から作成できます。</p>}
+
+      <section className="mcp-section">
+        <button className="copy-btn" onClick={handleIssueToken}>
+          MCPトークン発行
+        </button>
+        {issuedToken && (
+          <div className="token-box">
+            <p>このトークンは今回しか表示されません。コピーして保管してください。</p>
+            <code onClick={() => navigator.clipboard.writeText(issuedToken)}>{issuedToken}</code>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
