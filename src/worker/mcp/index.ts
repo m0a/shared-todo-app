@@ -4,6 +4,7 @@ import type { Context } from 'hono';
 import { z } from 'zod';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, and, asc, desc, isNull, isNotNull } from 'drizzle-orm';
+import { nanoid } from 'nanoid';
 import { lists, items, apiTokens } from '../db/schema';
 import { itemColorSchema, type ClientMessage } from '../../shared/ws-protocol';
 
@@ -80,6 +81,41 @@ export async function handleMcpRequest(
         .where(eq(lists.ownerId, auth.userId))
         .orderBy(desc(lists.updatedAt));
       return textResult(rows.map(({ shareToken, ...r }) => ({ ...r, shareUrl: shareUrl(shareToken) })));
+    },
+  );
+
+  server.registerTool(
+    'create_todo_list',
+    {
+      description: '新しいTodoリストを作成する。共有URL付きで返す',
+      inputSchema: { title: z.string().min(1).max(100) },
+    },
+    async ({ title }) => {
+      const now = Date.now();
+      const list = {
+        id: nanoid(),
+        shareToken: nanoid(22),
+        ownerId: auth.userId,
+        title,
+        currentRevision: 0,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await db.insert(lists).values(list);
+      return textResult({ id: list.id, title: list.title, shareUrl: shareUrl(list.shareToken) });
+    },
+  );
+
+  server.registerTool(
+    'delete_todo_list',
+    {
+      description: 'リストを完全に削除する（項目・履歴ごと消える。取り消し不可）',
+      inputSchema: { list_id: z.string() },
+    },
+    async ({ list_id }) => {
+      await ownedList(list_id);
+      await db.delete(lists).where(and(eq(lists.id, list_id), eq(lists.ownerId, auth.userId)));
+      return textResult({ ok: true });
     },
   );
 
