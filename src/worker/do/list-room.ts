@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import { drizzle, type DrizzleD1Database } from 'drizzle-orm/d1';
-import { eq, and, lte, asc } from 'drizzle-orm';
+import { eq, and, lte, lt, asc, isNull, isNotNull, inArray } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { lists, items, revisions, anonProfiles } from '../db/schema';
 import {
@@ -18,6 +18,7 @@ interface WsAttachment {
 }
 
 const REVISION_KEEP = 500; // 1リストあたり保持する世代数
+const TRASH_KEEP_MS = 30 * 24 * 60 * 60 * 1000; // ゴミ箱の保持期間（30日）
 
 /**
  * 1リスト = 1インスタンス。全ミューテーションを直列化し、
@@ -105,7 +106,13 @@ export class ListRoom extends DurableObject<Env> {
 
     const snapshot = JSON.parse(rev.snapshot) as Item[];
     const now = Date.now();
-    await db.delete(items).where(eq(items.listId, listId));
+    // アクティブな項目と、スナップショットとIDが重なるゴミ箱内の項目を消してから入れ直す
+    await db.delete(items).where(and(eq(items.listId, listId), isNull(items.deletedAt)));
+    if (snapshot.length > 0) {
+      await db
+        .delete(items)
+        .where(and(eq(items.listId, listId), inArray(items.id, snapshot.map((i) => i.id))));
+    }
     if (snapshot.length > 0) {
       await db.insert(items).values(
         snapshot.map((it) => ({
@@ -238,9 +245,28 @@ export class ListRoom extends DurableObject<Env> {
           .select({ text: items.text })
           .from(items)
           .where(and(eq(items.id, msg.itemId), eq(items.listId, listId)));
-        await db.delete(items).where(and(eq(items.id, msg.itemId), eq(items.listId, listId)));
+        // ソフトデリート: ゴミ箱へ移動（30日で自動完全削除）
+        await db
+          .update(items)
+          .set({ deletedAt: now, updatedAt: now })
+          .where(and(eq(items.id, msg.itemId), eq(items.listId, listId)));
         op = { type: 'delete_item', itemId: msg.itemId };
         opDetail = { text: target?.text };
+        break;
+      }
+      case 'restore_item': {
+        await db
+          .update(items)
+          .set({ deletedAt: null, updatedAt: now })
+          .where(and(eq(items.id, msg.itemId), eq(items.listId, listId)));
+        const [restored] = await db
+          .select({ id: items.id, text: items.text, checked: items.checked, color: items.color, position: items.position })
+          .from(items)
+          .where(and(eq(items.id, msg.itemId), eq(items.listId, listId)));
+        if (!restored) break;
+        // クライアントには追加として配れば画面に戻る
+        op = { type: 'add_item', item: restored as Item };
+        opDetail = { text: restored.text };
         break;
       }
       case 'set_checked': {
@@ -347,11 +373,18 @@ export class ListRoom extends DurableObject<Env> {
       }),
     ]);
 
-    // 古い世代の間引き（たまにでよい）
-    if (revision % 20 === 0 && revision > REVISION_KEEP) {
+    // 古い世代の間引きとゴミ箱の期限切れ掃除（たまにでよい）
+    if (revision % 20 === 0) {
+      if (revision > REVISION_KEEP) {
+        await db
+          .delete(revisions)
+          .where(and(eq(revisions.listId, listId), lte(revisions.seq, revision - REVISION_KEEP)));
+      }
       await db
-        .delete(revisions)
-        .where(and(eq(revisions.listId, listId), lte(revisions.seq, revision - REVISION_KEEP)));
+        .delete(items)
+        .where(
+          and(eq(items.listId, listId), isNotNull(items.deletedAt), lt(items.deletedAt, now - TRASH_KEEP_MS)),
+        );
     }
 
     this.broadcast({
@@ -381,7 +414,7 @@ export class ListRoom extends DurableObject<Env> {
     const rows = await db
       .select({ id: items.id, text: items.text, checked: items.checked, color: items.color, position: items.position })
       .from(items)
-      .where(eq(items.listId, listId))
+      .where(and(eq(items.listId, listId), isNull(items.deletedAt)))
       .orderBy(asc(items.position));
     return rows as Item[];
   }

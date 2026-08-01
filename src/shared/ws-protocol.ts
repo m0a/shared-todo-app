@@ -53,7 +53,14 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
     clientOpId: z.string(),
   }),
   z.object({
+    // ゴミ箱へ移動（ソフトデリート）
     type: z.literal('delete_item'),
+    itemId: z.string(),
+    clientOpId: z.string(),
+  }),
+  z.object({
+    // ゴミ箱から復元
+    type: z.literal('restore_item'),
     itemId: z.string(),
     clientOpId: z.string(),
   }),

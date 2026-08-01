@@ -3,7 +3,7 @@ import { StreamableHTTPTransport } from '@hono/mcp';
 import type { Context } from 'hono';
 import { z } from 'zod';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq, asc, desc } from 'drizzle-orm';
+import { eq, and, asc, desc, isNull, isNotNull } from 'drizzle-orm';
 import { lists, items, apiTokens } from '../db/schema';
 import { itemColorSchema, type ClientMessage } from '../../shared/ws-protocol';
 
@@ -112,7 +112,7 @@ export async function handleMcpRequest(
       const rows = await db
         .select({ id: items.id, text: items.text, checked: items.checked, color: items.color })
         .from(items)
-        .where(eq(items.listId, list.id))
+        .where(and(eq(items.listId, list.id), isNull(items.deletedAt)))
         .orderBy(asc(items.position));
       return textResult({ title: list.title, items: rows });
     },
@@ -150,8 +150,36 @@ export async function handleMcpRequest(
   );
 
   server.registerTool(
+    'get_trash',
+    { description: 'ゴミ箱の中身（削除済み項目）を取得する。30日で自動完全削除される', inputSchema: { list_id: z.string() } },
+    async ({ list_id }) => {
+      await ownedList(list_id);
+      const rows = await db
+        .select({ id: items.id, text: items.text, deletedAt: items.deletedAt })
+        .from(items)
+        .where(and(eq(items.listId, list_id), isNotNull(items.deletedAt)));
+      return textResult(rows);
+    },
+  );
+
+  server.registerTool(
+    'restore_items',
+    {
+      description: 'ゴミ箱から項目を復元する（複数可）',
+      inputSchema: { list_id: z.string(), item_ids: z.array(z.string()).min(1).max(100) },
+    },
+    async ({ list_id, item_ids }) => {
+      await ownedList(list_id);
+      for (const id of item_ids) {
+        await mutate(list_id, { type: 'restore_item', itemId: id, clientOpId: crypto.randomUUID() });
+      }
+      return textResult({ restored: item_ids.length });
+    },
+  );
+
+  server.registerTool(
     'delete_item',
-    { description: '項目を削除する', inputSchema: { list_id: z.string(), item_id: z.string() } },
+    { description: '項目を削除する（ゴミ箱へ移動。restore_itemsで復元可能）', inputSchema: { list_id: z.string(), item_id: z.string() } },
     async ({ list_id, item_id }) => {
       await ownedList(list_id);
       await mutate(list_id, { type: 'delete_item', itemId: item_id, clientOpId: crypto.randomUUID() });

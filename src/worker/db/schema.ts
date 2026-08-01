@@ -61,6 +61,7 @@ export const items = sqliteTable(
     checked: integer('checked', { mode: 'boolean' }).notNull().default(false),
     color: text('color'), // パレット名（shared/ws-protocol.ts の ITEM_COLORS）。null=色なし
     position: real('position').notNull(), // fractional indexing
+    deletedAt: integer('deleted_at'), // ソフトデリート（ゴミ箱）。null=通常、値あり=ゴミ箱行き。30日で自動完全削除
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
   },

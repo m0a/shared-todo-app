@@ -24,7 +24,9 @@ function describeOp(rev: RevisionRow): string {
     case 'update_item':
       return `${text}に変更`;
     case 'delete_item':
-      return `${text}を削除`;
+      return `${text}をゴミ箱へ`;
+    case 'restore_item':
+      return `${text}をゴミ箱から復元`;
     case 'set_checked':
       return `${text}を${detail.checked ? 'チェック' : 'チェック解除'}`;
     case 'move_item':
@@ -249,6 +251,8 @@ export function ListPage({ shareToken }: { shareToken: string }) {
 
   const [isOwner, setIsOwner] = useState(false);
   const [loggedIn, setLoggedIn] = useState(true); // 判明するまでバナーは出さない
+  const [showTrash, setShowTrash] = useState(false);
+  const [trash, setTrash] = useState<{ id: string; text: string; deletedAt: number | null }[]>([]);
   const [createdAt, setCreatedAt] = useState<number | null>(null);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const [showHistory, setShowHistory] = useState(false);
@@ -379,6 +383,19 @@ export function ListPage({ shareToken }: { shareToken: string }) {
     }
   }
 
+  async function openTrash() {
+    const res = await api.api.l[':shareToken'].trash.$get({ param: { shareToken } });
+    if (res.ok) {
+      setTrash((await res.json()).items);
+      setShowTrash(true);
+    }
+  }
+
+  function handleTrashRestore(id: string) {
+    send({ type: 'restore_item', itemId: id, clientOpId: crypto.randomUUID() });
+    setTrash((t) => t.filter((x) => x.id !== id));
+  }
+
   async function handleRestore(seq: number) {
     if (!confirm(`世代${seq}の状態に戻しますか？`)) return;
     await api.api.l[':shareToken'].restore.$post({ param: { shareToken }, json: { seq } });
@@ -444,6 +461,10 @@ export function ListPage({ shareToken }: { shareToken: string }) {
             共有
           </button>
           ・
+          <button className="link-btn" onClick={openTrash}>
+            ゴミ箱
+          </button>
+          ・
           {isOwner && (
             <>
               <button className="link-btn" onClick={openHistory}>
@@ -455,6 +476,41 @@ export function ListPage({ shareToken }: { shareToken: string }) {
           {connected ? '同期中' : '再接続中…'}
         </span>
       </header>
+
+      {showTrash && (
+        <div className="history-overlay" onClick={() => setShowTrash(false)}>
+          <div className="history-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="history-header">
+              <h2>ゴミ箱</h2>
+              <button className="delete-btn" onClick={() => setShowTrash(false)}>
+                ×
+              </button>
+            </div>
+            <ul className="history-list">
+              {trash.map((t) => (
+                <li key={t.id} className="history-row">
+                  <div className="history-main">
+                    <span className="history-desc">{t.text || '(空の項目)'}</span>
+                    <span className="history-meta">
+                      {t.deletedAt !== null &&
+                        `${new Date(t.deletedAt).toLocaleString('ja-JP', {
+                          month: 'numeric',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}に削除`}
+                    </span>
+                  </div>
+                  <button className="copy-btn" onClick={() => handleTrashRestore(t.id)}>
+                    復元
+                  </button>
+                </li>
+              ))}
+              {trash.length === 0 && <p className="empty-msg">ゴミ箱は空です（30日で自動削除）</p>}
+            </ul>
+          </div>
+        </div>
+      )}
 
       {showHistory && (
         <div className="history-overlay" onClick={() => setShowHistory(false)}>

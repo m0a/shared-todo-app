@@ -2,9 +2,9 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, isNotNull } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
-import { lists, revisions, users, apiTokens } from './db/schema';
+import { lists, items, revisions, users, apiTokens } from './db/schema';
 import { createAuthApp, getSessionUserId } from './auth/index';
 import { handleMcpRequest, verifyApiToken, sha256hex } from './mcp/index';
 
@@ -161,6 +161,22 @@ const app = new Hono<{ Bindings: Env }>()
       updatedAt: list.updatedAt,
       isOwner: userId !== null && userId === list.ownerId,
     });
+  })
+
+  // ゴミ箱の中身（共有URL経由・認証不要。復元はWSのrestore_itemで行う）
+  .get('/api/l/:shareToken/trash', async (c) => {
+    const db = drizzle(c.env.DB);
+    const [list] = await db
+      .select({ id: lists.id })
+      .from(lists)
+      .where(eq(lists.shareToken, c.req.param('shareToken')));
+    if (!list) return c.json({ error: 'not found' }, 404);
+    const rows = await db
+      .select({ id: items.id, text: items.text, deletedAt: items.deletedAt })
+      .from(items)
+      .where(and(eq(items.listId, list.id), isNotNull(items.deletedAt)))
+      .orderBy(desc(items.deletedAt));
+    return c.json({ items: rows });
   })
 
   // ---- 履歴 / Undo（作成者のみ） ----
