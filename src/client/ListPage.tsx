@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { hc } from 'hono/client';
 import type { AppType } from '../worker/index';
-import { useListSocket, affectedItemIds } from './useListSocket';
+import { useListSocket, affectedItemIds, applyWithTransition } from './useListSocket';
 import { ITEM_COLORS, type ItemColor, type Item, type ClientMessage } from '../shared/ws-protocol';
 
 const api = hc<AppType>('/');
@@ -225,9 +225,55 @@ export function ListPage({ shareToken }: { shareToken: string }) {
 
   const [flashIds, setFlashIds] = useState<ReadonlySet<string>>(new Set());
 
+  // チェック直後は3秒間その場にとどめてから「チェック済み」へ移動する
+  const CHECK_MOVE_DELAY_MS = 3000;
+  const [delayedChecked, setDelayedChecked] = useState<ReadonlySet<string>>(new Set());
+  const delayTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+
+  function scheduleCheckedMove(ids: string[]) {
+    setDelayedChecked((prev) => new Set([...prev, ...ids]));
+    for (const id of ids) {
+      clearTimeout(delayTimersRef.current.get(id));
+      delayTimersRef.current.set(
+        id,
+        setTimeout(() => {
+          delayTimersRef.current.delete(id);
+          // 移動はView Transitionsで滑らかに
+          applyWithTransition(() => {
+            setDelayedChecked((prev) => {
+              const next = new Set(prev);
+              next.delete(id);
+              return next;
+            });
+          }, true);
+        }, CHECK_MOVE_DELAY_MS),
+      );
+    }
+  }
+
+  function cancelCheckedMove(ids: string[]) {
+    for (const id of ids) {
+      clearTimeout(delayTimersRef.current.get(id));
+      delayTimersRef.current.delete(id);
+    }
+    setDelayedChecked((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) next.delete(id);
+      return next;
+    });
+  }
+
   const { title, items, connected, notFound, send, applyLocal } = useListSocket(shareToken, (msg, own) => {
     // 何か操作が届いた＝リストが更新された
     setUpdatedAt(Date.now());
+    // リモートのチェックONも同じく3秒とどめてから移動（OFFは即キャンセル）
+    if (msg.op.type === 'set_checked') {
+      if (msg.op.checked && !own) scheduleCheckedMove([msg.op.itemId]);
+      if (!msg.op.checked) cancelCheckedMove([msg.op.itemId]);
+    } else if (msg.op.type === 'set_checked_many') {
+      if (msg.op.checked && !own) scheduleCheckedMove(msg.op.itemIds);
+      if (!msg.op.checked) cancelCheckedMove(msg.op.itemIds);
+    }
     // 他の人・AIの変更は該当行を一瞬ハイライトして分かるようにする
     if (!own) {
       const ids = affectedItemIds(msg.op);
@@ -282,12 +328,13 @@ export function ListPage({ shareToken }: { shareToken: string }) {
     return <p className="error-msg">リストが見つかりません。URLを確認してください。</p>;
   }
 
-  const uncheckedRaw = items.filter((i) => !i.checked);
+  // チェック済みでも遅延中は元の位置（未チェック側）にとどめる
+  const uncheckedRaw = items.filter((i) => !i.checked || delayedChecked.has(i.id));
   // ドラッグ中はローカルの並び順で描画する
   const unchecked = dragOrder
     ? [...uncheckedRaw].sort((a, b) => dragOrder.indexOf(a.id) - dragOrder.indexOf(b.id))
     : uncheckedRaw;
-  const checked = items.filter((i) => i.checked);
+  const checked = items.filter((i) => i.checked && !delayedChecked.has(i.id));
 
   function startDrag(item: Item, e: React.PointerEvent) {
     e.preventDefault();
@@ -404,7 +451,12 @@ export function ListPage({ shareToken }: { shareToken: string }) {
 
   // チェック・削除・色変更はエコーを待たず手元に即反映してから送る
   function sendOptimistic(msg: ClientMessage) {
-    if (msg.type === 'set_checked') applyLocal({ type: 'set_checked', itemId: msg.itemId, checked: msg.checked });
+    if (msg.type === 'set_checked') {
+      applyLocal({ type: 'set_checked', itemId: msg.itemId, checked: msg.checked });
+      // 同期は即時。表示上の「チェック済みへの移動」だけ遅らせる
+      if (msg.checked) scheduleCheckedMove([msg.itemId]);
+      else cancelCheckedMove([msg.itemId]);
+    }
     else if (msg.type === 'delete_item') applyLocal({ type: 'delete_item', itemId: msg.itemId });
     else if (msg.type === 'set_color') applyLocal({ type: 'set_color', itemId: msg.itemId, color: msg.color });
     send(msg);

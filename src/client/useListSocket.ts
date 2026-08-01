@@ -26,7 +26,7 @@ export type ServerOp = Extract<
 export type Op = ServerOp['op'];
 
 // リモート変更をアニメーションさせる（View Transitions対応ブラウザのみ）
-function applyWithTransition(updater: () => void, animate: boolean) {
+export function applyWithTransition(updater: () => void, animate: boolean) {
   const d = document as Document & { startViewTransition?: (cb: () => void) => unknown };
   if (animate && d.startViewTransition) {
     d.startViewTransition(() => {
