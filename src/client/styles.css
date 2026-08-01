@@ -492,3 +492,67 @@ li.item.dragging {
   font-size: 0.7rem;
   color: var(--text-muted);
 }
+
+/* 項目の色 */
+li.item {
+  position: relative;
+}
+
+.color-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.palette {
+  position: absolute;
+  right: 8px;
+  top: calc(100% - 6px);
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 240px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.palette-swatch {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  padding: 0;
+}
+
+.palette-swatch.none {
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 1rem;
+}
+
+/* ログイン誘導バナー */
+.login-banner {
+  margin-top: 32px;
+  padding: 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.login-banner a {
+  color: var(--accent);
+  font-weight: 500;
+}

@@ -113,6 +113,7 @@ export class ListRoom extends DurableObject<Env> {
           listId,
           text: it.text,
           checked: it.checked,
+          color: it.color ?? null,
           position: it.position,
           createdAt: now,
           updatedAt: now,
@@ -208,12 +209,13 @@ export class ListRoom extends DurableObject<Env> {
         } else {
           position = current.reduce((m, i) => Math.max(m, i.position), 0) + 1;
         }
-        const item: Item = { id: nanoid(), text: msg.text, checked: false, position };
+        const item: Item = { id: nanoid(), text: msg.text, checked: false, color: null, position };
         await db.insert(items).values({
           id: item.id,
           listId,
           text: item.text,
           checked: item.checked,
+          color: item.color,
           position: item.position,
           createdAt: now,
           updatedAt: now,
@@ -260,6 +262,19 @@ export class ListRoom extends DurableObject<Env> {
           .set({ position: msg.position, updatedAt: now })
           .where(and(eq(items.id, msg.itemId), eq(items.listId, listId)));
         op = { type: 'move_item', itemId: msg.itemId, position: msg.position };
+        break;
+      }
+      case 'set_color': {
+        const [target] = await db
+          .select({ text: items.text })
+          .from(items)
+          .where(and(eq(items.id, msg.itemId), eq(items.listId, listId)));
+        await db
+          .update(items)
+          .set({ color: msg.color, updatedAt: now })
+          .where(and(eq(items.id, msg.itemId), eq(items.listId, listId)));
+        op = { type: 'set_color', itemId: msg.itemId, color: msg.color };
+        opDetail = { text: target?.text, color: msg.color };
         break;
       }
     }
@@ -320,11 +335,11 @@ export class ListRoom extends DurableObject<Env> {
 
   private async loadItems(db: DrizzleD1Database, listId: string): Promise<Item[]> {
     const rows = await db
-      .select({ id: items.id, text: items.text, checked: items.checked, position: items.position })
+      .select({ id: items.id, text: items.text, checked: items.checked, color: items.color, position: items.position })
       .from(items)
       .where(eq(items.listId, listId))
       .orderBy(asc(items.position));
-    return rows;
+    return rows as Item[];
   }
 
   private async sendSync(ws: WebSocket): Promise<void> {

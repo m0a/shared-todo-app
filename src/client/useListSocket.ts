@@ -114,5 +114,7 @@ function applyOp(items: Item[], op: Op): Item[] {
       return items
         .map((i) => (i.id === op.itemId ? { ...i, position: op.position } : i))
         .sort((a, b) => a.position - b.position);
+    case 'set_color':
+      return items.map((i) => (i.id === op.itemId ? { ...i, color: op.color } : i));
   }
 }

@@ -59,6 +59,7 @@ export const items = sqliteTable(
       .references(() => lists.id, { onDelete: 'cascade' }),
     text: text('text').notNull(),
     checked: integer('checked', { mode: 'boolean' }).notNull().default(false),
+    color: text('color'), // パレット名（shared/ws-protocol.ts の ITEM_COLORS）。null=色なし
     position: real('position').notNull(), // fractional indexing
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),

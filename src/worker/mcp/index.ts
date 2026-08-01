@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, asc, desc } from 'drizzle-orm';
 import { lists, items, apiTokens } from '../db/schema';
-import type { ClientMessage } from '../../shared/ws-protocol';
+import { itemColorSchema, type ClientMessage } from '../../shared/ws-protocol';
 
 export async function sha256hex(input: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
@@ -110,7 +110,7 @@ export async function handleMcpRequest(
     async ({ list_id }) => {
       const list = await ownedList(list_id);
       const rows = await db
-        .select({ id: items.id, text: items.text, checked: items.checked })
+        .select({ id: items.id, text: items.text, checked: items.checked, color: items.color })
         .from(items)
         .where(eq(items.listId, list.id))
         .orderBy(asc(items.position));
@@ -165,6 +165,24 @@ export async function handleMcpRequest(
     async ({ list_id, item_id }) => {
       await ownedList(list_id);
       await mutate(list_id, { type: 'set_checked', itemId: item_id, checked: true, clientOpId: crypto.randomUUID() });
+      return textResult({ ok: true });
+    },
+  );
+
+  server.registerTool(
+    'set_item_color',
+    {
+      description:
+        '項目に色を付ける（食材の種類ごとの色分け等に）。色: red/orange/yellow/green/teal/blue/purple/pink/brown/gray、nullで色を外す',
+      inputSchema: {
+        list_id: z.string(),
+        item_id: z.string(),
+        color: itemColorSchema.nullable(),
+      },
+    },
+    async ({ list_id, item_id, color }) => {
+      await ownedList(list_id);
+      await mutate(list_id, { type: 'set_color', itemId: item_id, color, clientOpId: crypto.randomUUID() });
       return textResult({ ok: true });
     },
   );

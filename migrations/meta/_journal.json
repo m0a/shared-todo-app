@@ -15,6 +15,13 @@
       "when": 1785584106549,
       "tag": "0001_gigantic_sharon_ventura",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1785586775733,
+      "tag": "0002_nebulous_hedge_knight",
+      "breakpoints": true
     }
   ]
 }

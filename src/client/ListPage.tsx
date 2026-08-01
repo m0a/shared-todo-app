@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { hc } from 'hono/client';
 import type { AppType } from '../worker/index';
 import { useListSocket } from './useListSocket';
-import type { Item, ClientMessage } from '../shared/ws-protocol';
+import { ITEM_COLORS, type ItemColor, type Item, type ClientMessage } from '../shared/ws-protocol';
 
 const api = hc<AppType>('/');
 
@@ -29,6 +29,8 @@ function describeOp(rev: RevisionRow): string {
       return `${text}を${detail.checked ? 'チェック' : 'チェック解除'}`;
     case 'move_item':
       return '並び替え';
+    case 'set_color':
+      return `${text}の色を変更`;
     case 'restore':
       return `世代${detail.restoredFrom}へ復元`;
     default:
@@ -68,6 +70,7 @@ function ItemRow({
   rowRef?: (el: HTMLLIElement | null) => void;
 }) {
   const [draft, setDraft] = useState(item.text);
+  const [showPalette, setShowPalette] = useState(false);
   const focusedRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -104,8 +107,16 @@ function ItemRow({
     }, 400);
   }
 
+  const colorStyle = item.color
+    ? { borderLeft: `5px solid ${ITEM_COLORS[item.color]}`, background: `${ITEM_COLORS[item.color]}22` }
+    : undefined;
+
   return (
-    <li ref={rowRef} className={`item${item.checked ? ' checked' : ''}${dragging ? ' dragging' : ''}`}>
+    <li
+      ref={rowRef}
+      style={colorStyle}
+      className={`item${item.checked ? ' checked' : ''}${dragging ? ' dragging' : ''}`}
+    >
       {onDragHandleDown && (
         <span className="drag-handle" onPointerDown={(e) => onDragHandleDown(item, e)}>
           ⠿
@@ -148,12 +159,44 @@ function ItemRow({
         }}
       />
       <button
+        className="color-btn"
+        aria-label="色を変更"
+        style={item.color ? { background: ITEM_COLORS[item.color] } : undefined}
+        onClick={() => setShowPalette((v) => !v)}
+      />
+      <button
         className="delete-btn"
         aria-label="削除"
         onClick={() => send({ type: 'delete_item', itemId: item.id, clientOpId: crypto.randomUUID() })}
       >
         ×
       </button>
+      {showPalette && (
+        <div className="palette" onClick={(e) => e.stopPropagation()}>
+          <button
+            className="palette-swatch none"
+            aria-label="色なし"
+            onClick={() => {
+              send({ type: 'set_color', itemId: item.id, color: null, clientOpId: crypto.randomUUID() });
+              setShowPalette(false);
+            }}
+          >
+            ×
+          </button>
+          {(Object.keys(ITEM_COLORS) as ItemColor[]).map((name) => (
+            <button
+              key={name}
+              className="palette-swatch"
+              aria-label={name}
+              style={{ background: ITEM_COLORS[name] }}
+              onClick={() => {
+                send({ type: 'set_color', itemId: item.id, color: name, clientOpId: crypto.randomUUID() });
+                setShowPalette(false);
+              }}
+            />
+          ))}
+        </div>
+      )}
     </li>
   );
 }
@@ -177,6 +220,7 @@ export function ListPage({ shareToken }: { shareToken: string }) {
   });
 
   const [isOwner, setIsOwner] = useState(false);
+  const [loggedIn, setLoggedIn] = useState(true); // 判明するまでバナーは出さない
   const [createdAt, setCreatedAt] = useState<number | null>(null);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const [showHistory, setShowHistory] = useState(false);
@@ -192,6 +236,12 @@ export function ListPage({ shareToken }: { shareToken: string }) {
           setCreatedAt(meta.createdAt);
           setUpdatedAt(meta.updatedAt);
         }
+      })
+      .catch(() => {});
+    api.api.auth.me
+      .$get()
+      .then(async (res) => {
+        if (res.ok) setLoggedIn((await res.json()).user !== null);
       })
       .catch(() => {});
   }, [shareToken]);
@@ -413,6 +463,12 @@ export function ListPage({ shareToken }: { shareToken: string }) {
           <p className="section-label">チェック済み {checked.length}件</p>
           <ul className="items">{checked.map((i) => renderRow(i))}</ul>
         </section>
+      )}
+
+      {!loggedIn && (
+        <p className="login-banner">
+          <a href="/">ログイン（無料・パスキー）</a>すると、自分のTodoリストを作って共有できます
+        </p>
       )}
     </div>
   );
