@@ -277,6 +277,38 @@ export class ListRoom extends DurableObject<Env> {
         opDetail = { text: target?.text, color: msg.color };
         break;
       }
+      case 'set_colors': {
+        const stmts = msg.changes.map((ch) =>
+          db
+            .update(items)
+            .set({ color: ch.color, updatedAt: now })
+            .where(and(eq(items.id, ch.itemId), eq(items.listId, listId))),
+        );
+        await db.batch(stmts as [(typeof stmts)[number], ...(typeof stmts)[number][]]);
+        op = { type: 'set_colors', changes: msg.changes };
+        opDetail = { count: msg.changes.length };
+        break;
+      }
+      case 'reorder': {
+        // 渡された順に 1,2,3... を振り直す。渡されなかった項目は末尾に既存順で続ける
+        const current = await this.loadItems(db, listId);
+        const givenSet = new Set(msg.orderedIds);
+        const ordered = [
+          ...msg.orderedIds.filter((id) => current.some((i) => i.id === id)),
+          ...current.filter((i) => !givenSet.has(i.id)).map((i) => i.id),
+        ];
+        const stmts = ordered.map((id, idx) =>
+          db
+            .update(items)
+            .set({ position: idx + 1, updatedAt: now })
+            .where(and(eq(items.id, id), eq(items.listId, listId))),
+        );
+        await db.batch(stmts as [(typeof stmts)[number], ...(typeof stmts)[number][]]);
+        const after = await this.loadItems(db, listId);
+        op = { type: 'reorder', items: after };
+        opDetail = { count: ordered.length };
+        break;
+      }
     }
     if (!op) return;
 

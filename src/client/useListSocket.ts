@@ -116,5 +116,11 @@ function applyOp(items: Item[], op: Op): Item[] {
         .sort((a, b) => a.position - b.position);
     case 'set_color':
       return items.map((i) => (i.id === op.itemId ? { ...i, color: op.color } : i));
+    case 'set_colors': {
+      const byId = new Map(op.changes.map((c) => [c.itemId, c.color]));
+      return items.map((i) => (byId.has(i.id) ? { ...i, color: byId.get(i.id) ?? null } : i));
+    }
+    case 'reorder':
+      return op.items;
   }
 }

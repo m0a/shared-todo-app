@@ -75,6 +75,21 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
     color: itemColorSchema.nullable(),
     clientOpId: z.string(),
   }),
+  // 一括色変更（1世代・1ブロードキャストで処理）
+  z.object({
+    type: z.literal('set_colors'),
+    changes: z
+      .array(z.object({ itemId: z.string(), color: itemColorSchema.nullable() }))
+      .min(1)
+      .max(100),
+    clientOpId: z.string(),
+  }),
+  // 一括並べ替え: 並べたい順の項目ID（1世代・1ブロードキャスト）
+  z.object({
+    type: z.literal('reorder'),
+    orderedIds: z.array(z.string()).min(1).max(200),
+    clientOpId: z.string(),
+  }),
   z.object({
     type: z.literal('set_nickname'),
     nickname: z.string().min(1).max(50),
@@ -104,6 +119,11 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
       z.object({ type: z.literal('set_checked'), itemId: z.string(), checked: z.boolean() }),
       z.object({ type: z.literal('move_item'), itemId: z.string(), position: z.number() }),
       z.object({ type: z.literal('set_color'), itemId: z.string(), color: itemColorSchema.nullable() }),
+      z.object({
+        type: z.literal('set_colors'),
+        changes: z.array(z.object({ itemId: z.string(), color: itemColorSchema.nullable() })),
+      }),
+      z.object({ type: z.literal('reorder'), items: z.array(itemSchema) }),
     ]),
     actor: actorSchema,
     clientOpId: z.string().nullable(),

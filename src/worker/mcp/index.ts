@@ -170,19 +170,46 @@ export async function handleMcpRequest(
   );
 
   server.registerTool(
-    'set_item_color',
+    'set_item_colors',
     {
       description:
-        '項目に色を付ける（食材の種類ごとの色分け等に）。色: red/orange/yellow/green/teal/blue/purple/pink/brown/gray、nullで色を外す',
+        '項目に色を付ける（複数一括可。食材の種類ごとの色分け等に）。色: red/orange/yellow/green/teal/blue/purple/pink/brown/gray、nullで色を外す。1回の呼び出しで全項目まとめて指定するのが速い',
       inputSchema: {
         list_id: z.string(),
-        item_id: z.string(),
-        color: itemColorSchema.nullable(),
+        items: z
+          .array(z.object({ item_id: z.string(), color: itemColorSchema.nullable() }))
+          .min(1)
+          .max(100),
       },
     },
-    async ({ list_id, item_id, color }) => {
+    async ({ list_id, items: changes }) => {
       await ownedList(list_id);
-      await mutate(list_id, { type: 'set_color', itemId: item_id, color, clientOpId: crypto.randomUUID() });
+      await mutate(list_id, {
+        type: 'set_colors',
+        changes: changes.map((ch) => ({ itemId: ch.item_id, color: ch.color })),
+        clientOpId: crypto.randomUUID(),
+      });
+      return textResult({ ok: true, changed: changes.length });
+    },
+  );
+
+  server.registerTool(
+    'reorder_items',
+    {
+      description:
+        'リスト全体を一括で並べ替える。並べたい順に項目IDを渡す（渡さなかった項目は末尾に回る）。1件ずつmove_itemを呼ぶよりこちらが速い',
+      inputSchema: {
+        list_id: z.string(),
+        ordered_item_ids: z.array(z.string()).min(1).max(200),
+      },
+    },
+    async ({ list_id, ordered_item_ids }) => {
+      await ownedList(list_id);
+      await mutate(list_id, {
+        type: 'reorder',
+        orderedIds: ordered_item_ids,
+        clientOpId: crypto.randomUUID(),
+      });
       return textResult({ ok: true });
     },
   );

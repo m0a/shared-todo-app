@@ -31,6 +31,10 @@ function describeOp(rev: RevisionRow): string {
       return '並び替え';
     case 'set_color':
       return `${text}の色を変更`;
+    case 'set_colors':
+      return `${detail.count}件の色を変更`;
+    case 'reorder':
+      return '一括並べ替え';
     case 'restore':
       return `世代${detail.restoredFrom}へ復元`;
     default:
