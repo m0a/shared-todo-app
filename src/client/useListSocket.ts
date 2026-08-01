@@ -94,9 +94,10 @@ export function useListSocket(
         }
         revisionRef.current = msg.revision;
         const own = msg.clientOpId !== null && sentOpsRef.current.delete(msg.clientOpId);
+        // コールバックを先に呼ぶ: 遅延移動の登録などを、下のflushSyncによる描画と同時に反映させるため
+        onOpRef.current?.(msg, own);
         // 自分の操作は楽観的更新済みなのでアニメーションしない
         applyWithTransition(() => setState((s) => ({ ...s, items: applyOp(s.items, msg.op) })), !own);
-        onOpRef.current?.(msg, own);
       };
 
       ws.onclose = () => {

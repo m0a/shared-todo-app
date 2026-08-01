@@ -225,40 +225,42 @@ export function ListPage({ shareToken }: { shareToken: string }) {
 
   const [flashIds, setFlashIds] = useState<ReadonlySet<string>>(new Set());
 
-  // チェック直後は3秒間その場にとどめてから「チェック済み」へ移動する
+  // チェックON/OFFの直後は3秒間その場にとどめてから移動する（同期自体は即時）。
+  // holds: id → 変更後もとどまって描画される側（'unchecked'=上のリスト / 'checked'=チェック済みセクション）
   const CHECK_MOVE_DELAY_MS = 3000;
-  const [delayedChecked, setDelayedChecked] = useState<ReadonlySet<string>>(new Set());
-  const delayTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const [holds, setHolds] = useState<ReadonlyMap<string, 'unchecked' | 'checked'>>(new Map());
+  const holdTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 
-  function scheduleCheckedMove(ids: string[]) {
-    setDelayedChecked((prev) => new Set([...prev, ...ids]));
-    for (const id of ids) {
-      clearTimeout(delayTimersRef.current.get(id));
-      delayTimersRef.current.set(
-        id,
-        setTimeout(() => {
-          delayTimersRef.current.delete(id);
-          // 移動はView Transitionsで滑らかに
-          applyWithTransition(() => {
-            setDelayedChecked((prev) => {
-              const next = new Set(prev);
-              next.delete(id);
-              return next;
-            });
-          }, true);
-        }, CHECK_MOVE_DELAY_MS),
-      );
-    }
-  }
-
-  function cancelCheckedMove(ids: string[]) {
-    for (const id of ids) {
-      clearTimeout(delayTimersRef.current.get(id));
-      delayTimersRef.current.delete(id);
-    }
-    setDelayedChecked((prev) => {
-      const next = new Set(prev);
-      for (const id of ids) next.delete(id);
+  function onCheckedChange(ids: string[], nowChecked: boolean) {
+    // ONにした→しばらく上に留まる / OFFにした→しばらく下に留まる
+    const keepArea = nowChecked ? 'unchecked' : 'checked';
+    const oppositeHold = nowChecked ? 'checked' : 'unchecked';
+    setHolds((prev) => {
+      const next = new Map(prev);
+      for (const id of ids) {
+        clearTimeout(holdTimersRef.current.get(id));
+        holdTimersRef.current.delete(id);
+        if (next.get(id) === oppositeHold) {
+          // 保留中に元へ戻された → 保留解除だけ（その場に留まる）
+          next.delete(id);
+        } else {
+          next.set(id, keepArea);
+          holdTimersRef.current.set(
+            id,
+            setTimeout(() => {
+              holdTimersRef.current.delete(id);
+              // 移動はView Transitionsで滑らかに
+              applyWithTransition(() => {
+                setHolds((p) => {
+                  const n = new Map(p);
+                  n.delete(id);
+                  return n;
+                });
+              }, true);
+            }, CHECK_MOVE_DELAY_MS),
+          );
+        }
+      }
       return next;
     });
   }
@@ -266,13 +268,11 @@ export function ListPage({ shareToken }: { shareToken: string }) {
   const { title, items, connected, notFound, send, applyLocal } = useListSocket(shareToken, (msg, own) => {
     // 何か操作が届いた＝リストが更新された
     setUpdatedAt(Date.now());
-    // リモートのチェックONも同じく3秒とどめてから移動（OFFは即キャンセル）
-    if (msg.op.type === 'set_checked') {
-      if (msg.op.checked && !own) scheduleCheckedMove([msg.op.itemId]);
-      if (!msg.op.checked) cancelCheckedMove([msg.op.itemId]);
-    } else if (msg.op.type === 'set_checked_many') {
-      if (msg.op.checked && !own) scheduleCheckedMove(msg.op.itemIds);
-      if (!msg.op.checked) cancelCheckedMove(msg.op.itemIds);
+    // リモートのチェックON/OFFも同じく3秒とどめてから移動
+    if (!own && msg.op.type === 'set_checked') {
+      onCheckedChange([msg.op.itemId], msg.op.checked);
+    } else if (!own && msg.op.type === 'set_checked_many') {
+      onCheckedChange(msg.op.itemIds, msg.op.checked);
     }
     // 他の人・AIの変更は該当行を一瞬ハイライトして分かるようにする
     if (!own) {
@@ -328,13 +328,17 @@ export function ListPage({ shareToken }: { shareToken: string }) {
     return <p className="error-msg">リストが見つかりません。URLを確認してください。</p>;
   }
 
-  // チェック済みでも遅延中は元の位置（未チェック側）にとどめる
-  const uncheckedRaw = items.filter((i) => !i.checked || delayedChecked.has(i.id));
+  // チェック状態が変わっても保留中は元のセクションにとどめて描画する
+  const uncheckedRaw = items.filter(
+    (i) => holds.get(i.id) === 'unchecked' || (!i.checked && holds.get(i.id) !== 'checked'),
+  );
   // ドラッグ中はローカルの並び順で描画する
   const unchecked = dragOrder
     ? [...uncheckedRaw].sort((a, b) => dragOrder.indexOf(a.id) - dragOrder.indexOf(b.id))
     : uncheckedRaw;
-  const checked = items.filter((i) => i.checked && !delayedChecked.has(i.id));
+  const checked = items.filter(
+    (i) => holds.get(i.id) === 'checked' || (i.checked && holds.get(i.id) !== 'unchecked'),
+  );
 
   function startDrag(item: Item, e: React.PointerEvent) {
     e.preventDefault();
@@ -453,9 +457,8 @@ export function ListPage({ shareToken }: { shareToken: string }) {
   function sendOptimistic(msg: ClientMessage) {
     if (msg.type === 'set_checked') {
       applyLocal({ type: 'set_checked', itemId: msg.itemId, checked: msg.checked });
-      // 同期は即時。表示上の「チェック済みへの移動」だけ遅らせる
-      if (msg.checked) scheduleCheckedMove([msg.itemId]);
-      else cancelCheckedMove([msg.itemId]);
+      // 同期は即時。表示上の行移動だけ遅らせる
+      onCheckedChange([msg.itemId], msg.checked);
     }
     else if (msg.type === 'delete_item') applyLocal({ type: 'delete_item', itemId: msg.itemId });
     else if (msg.type === 'set_color') applyLocal({ type: 'set_color', itemId: msg.itemId, color: msg.color });
