@@ -21,13 +21,16 @@ export type Actor = z.infer<typeof actorSchema>;
 export const clientMessageSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('add_item'),
-    text: z.string().min(1).max(500),
+    // Keep風エディタでは空行も作れる（Enterで行分割した直後など）
+    text: z.string().max(500),
+    // 指定した項目の直後に挿入する。省略時は末尾
+    afterId: z.string().optional(),
     clientOpId: z.string(),
   }),
   z.object({
     type: z.literal('update_item'),
     itemId: z.string(),
-    text: z.string().min(1).max(500),
+    text: z.string().max(500),
     clientOpId: z.string(),
   }),
   z.object({

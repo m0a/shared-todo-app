@@ -17,7 +17,15 @@ export interface ListState {
   notFound: boolean;
 }
 
-export function useListSocket(shareToken: string) {
+export type ServerOp = Extract<
+  ReturnType<typeof serverMessageSchema.parse>,
+  { type: 'op' }
+>;
+
+export function useListSocket(
+  shareToken: string,
+  onOp?: (msg: ServerOp) => void,
+) {
   const [state, setState] = useState<ListState>({
     title: '',
     items: [],
@@ -26,6 +34,8 @@ export function useListSocket(shareToken: string) {
   });
   const wsRef = useRef<WebSocket | null>(null);
   const revisionRef = useRef(0);
+  const onOpRef = useRef(onOp);
+  onOpRef.current = onOp;
 
   useEffect(() => {
     let disposed = false;
@@ -61,6 +71,7 @@ export function useListSocket(shareToken: string) {
         }
         revisionRef.current = msg.revision;
         setState((s) => ({ ...s, items: applyOp(s.items, msg.op) }));
+        onOpRef.current?.(msg);
       };
 
       ws.onclose = () => {

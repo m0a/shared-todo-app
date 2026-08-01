@@ -1,8 +1,8 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { hc } from 'hono/client';
 import type { AppType } from '../worker/index';
 import { useListSocket } from './useListSocket';
-import type { Item } from '../shared/ws-protocol';
+import type { Item, ClientMessage } from '../shared/ws-protocol';
 
 const api = hc<AppType>('/');
 
@@ -17,7 +17,7 @@ interface RevisionRow {
 
 function describeOp(rev: RevisionRow): string {
   const detail = rev.opDetail ? (JSON.parse(rev.opDetail) as Record<string, unknown>) : {};
-  const text = typeof detail.text === 'string' ? `「${detail.text}」` : '';
+  const text = typeof detail.text === 'string' && detail.text !== '' ? `「${detail.text}」` : '項目';
   switch (rev.opType) {
     case 'add_item':
       return `${text}を追加`;
@@ -41,11 +41,124 @@ function actorLabel(rev: RevisionRow): string {
   return rev.actorName ?? (rev.actorType === 'owner' ? '作成者' : 'ゲスト');
 }
 
+/**
+ * Keep風のインライン編集行。
+ * - 常時編集可能。入力はデバウンスして同期、blur/Enterで確定
+ * - フォーカス中はリモート更新で手元の編集を上書きしない
+ */
+function ItemRow({
+  item,
+  send,
+  onEnter,
+  onBackspaceEmpty,
+  focusRequested,
+  onFocused,
+}: {
+  item: Item;
+  send: (msg: ClientMessage) => void;
+  onEnter: (item: Item) => void;
+  onBackspaceEmpty: (item: Item) => void;
+  focusRequested: boolean;
+  onFocused: () => void;
+}) {
+  const [draft, setDraft] = useState(item.text);
+  const focusedRef = useRef(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+
+  // 非フォーカス時はリモートのテキストに追従する
+  useEffect(() => {
+    if (!focusedRef.current) setDraft(item.text);
+  }, [item.text]);
+
+  useEffect(() => {
+    if (focusRequested && inputRef.current) {
+      inputRef.current.focus();
+      onFocused();
+    }
+  }, [focusRequested, onFocused]);
+
+  function commit() {
+    clearTimeout(timerRef.current);
+    if (draftRef.current !== item.text) {
+      send({ type: 'update_item', itemId: item.id, text: draftRef.current, clientOpId: crypto.randomUUID() });
+    }
+  }
+
+  function handleChange(value: string) {
+    setDraft(value);
+    // ライブ同期（デバウンス400ms）
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      if (draftRef.current !== item.text) {
+        send({ type: 'update_item', itemId: item.id, text: draftRef.current, clientOpId: crypto.randomUUID() });
+      }
+    }, 400);
+  }
+
+  return (
+    <li className={`item${item.checked ? ' checked' : ''}`}>
+      <input
+        type="checkbox"
+        checked={item.checked}
+        onChange={(e) =>
+          send({ type: 'set_checked', itemId: item.id, checked: e.target.checked, clientOpId: crypto.randomUUID() })
+        }
+      />
+      <input
+        ref={inputRef}
+        className="item-input"
+        value={draft}
+        placeholder=""
+        enterKeyHint="enter"
+        onChange={(e) => handleChange(e.target.value)}
+        onFocus={() => {
+          focusedRef.current = true;
+        }}
+        onBlur={() => {
+          focusedRef.current = false;
+          commit();
+          // 空のまま離れた行は消す（Keepと同じ掃除）
+          if (draftRef.current === '') onBackspaceEmpty(item);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            commit();
+            onEnter(item);
+          } else if (e.key === 'Backspace' && draftRef.current === '') {
+            e.preventDefault();
+            onBackspaceEmpty(item);
+          } else if (e.key === 'Escape') {
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
+      />
+      <button
+        className="delete-btn"
+        aria-label="削除"
+        onClick={() => send({ type: 'delete_item', itemId: item.id, clientOpId: crypto.randomUUID() })}
+      >
+        ×
+      </button>
+    </li>
+  );
+}
+
 export function ListPage({ shareToken }: { shareToken: string }) {
-  const { title, items, connected, notFound, send } = useListSocket(shareToken);
-  const [draft, setDraft] = useState('');
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState('');
+  const [focusId, setFocusId] = useState<string | null>(null);
+  const pendingFocusOpRef = useRef<string | null>(null);
+
+  const { title, items, connected, notFound, send } = useListSocket(shareToken, (msg) => {
+    // 自分が「Enterで行追加」した項目のエコーが来たらフォーカスを移す
+    if (msg.op.type === 'add_item' && msg.clientOpId && msg.clientOpId === pendingFocusOpRef.current) {
+      pendingFocusOpRef.current = null;
+      setFocusId(msg.op.item.id);
+    }
+  });
+
   const [isOwner, setIsOwner] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<RevisionRow[]>([]);
@@ -54,13 +167,30 @@ export function ListPage({ shareToken }: { shareToken: string }) {
     api.api.l[':shareToken']
       .$get({ param: { shareToken } })
       .then(async (res) => {
-        if (res.ok) {
-          const meta = await res.json();
-          setIsOwner(meta.isOwner);
-        }
+        if (res.ok) setIsOwner((await res.json()).isOwner);
       })
       .catch(() => {});
   }, [shareToken]);
+
+  if (notFound) {
+    return <p className="error-msg">リストが見つかりません。URLを確認してください。</p>;
+  }
+
+  const unchecked = items.filter((i) => !i.checked);
+  const checked = items.filter((i) => i.checked);
+
+  function addAfter(item: Item | null) {
+    const clientOpId = crypto.randomUUID();
+    pendingFocusOpRef.current = clientOpId;
+    send({ type: 'add_item', text: '', ...(item ? { afterId: item.id } : {}), clientOpId });
+  }
+
+  function deleteAndFocusPrev(item: Item) {
+    const idx = unchecked.findIndex((i) => i.id === item.id);
+    const prev = idx > 0 ? unchecked[idx - 1] : null;
+    send({ type: 'delete_item', itemId: item.id, clientOpId: crypto.randomUUID() });
+    if (prev) setFocusId(prev.id);
+  }
 
   async function openHistory() {
     const res = await api.api.l[':shareToken'].revisions.$get({ param: { shareToken } });
@@ -76,76 +206,17 @@ export function ListPage({ shareToken }: { shareToken: string }) {
     setShowHistory(false);
   }
 
-  if (notFound) {
-    return <p className="error-msg">リストが見つかりません。URLを確認してください。</p>;
-  }
-
-  const unchecked = items.filter((i) => !i.checked);
-  const checked = items.filter((i) => i.checked);
-
-  function handleAdd(e: FormEvent) {
-    e.preventDefault();
-    const text = draft.trim();
-    if (!text) return;
-    send({ type: 'add_item', text, clientOpId: crypto.randomUUID() });
-    setDraft('');
-  }
-
-  function startEdit(item: Item) {
-    setEditingId(item.id);
-    setEditDraft(item.text);
-  }
-
-  function commitEdit() {
-    if (editingId === null) return;
-    const text = editDraft.trim();
-    const original = items.find((i) => i.id === editingId);
-    if (text && original && text !== original.text) {
-      send({ type: 'update_item', itemId: editingId, text, clientOpId: crypto.randomUUID() });
-    }
-    setEditingId(null);
-  }
-
-  function renderItem(item: Item) {
+  function renderRow(item: Item) {
     return (
-      <li key={item.id} className={`item${item.checked ? ' checked' : ''}`}>
-        <input
-          type="checkbox"
-          checked={item.checked}
-          onChange={(e) =>
-            send({
-              type: 'set_checked',
-              itemId: item.id,
-              checked: e.target.checked,
-              clientOpId: crypto.randomUUID(),
-            })
-          }
-        />
-        {editingId === item.id ? (
-          <input
-            className="item-edit"
-            value={editDraft}
-            autoFocus
-            onChange={(e) => setEditDraft(e.target.value)}
-            onBlur={commitEdit}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') commitEdit();
-              if (e.key === 'Escape') setEditingId(null);
-            }}
-          />
-        ) : (
-          <span className="item-text" onClick={() => startEdit(item)}>
-            {item.text}
-          </span>
-        )}
-        <button
-          className="delete-btn"
-          aria-label="削除"
-          onClick={() => send({ type: 'delete_item', itemId: item.id, clientOpId: crypto.randomUUID() })}
-        >
-          ×
-        </button>
-      </li>
+      <ItemRow
+        key={item.id}
+        item={item}
+        send={send}
+        onEnter={(it) => addAfter(it)}
+        onBackspaceEmpty={(it) => deleteAndFocusPrev(it)}
+        focusRequested={focusId === item.id}
+        onFocused={() => setFocusId(null)}
+      />
     );
   }
 
@@ -199,24 +270,16 @@ export function ListPage({ shareToken }: { shareToken: string }) {
         </div>
       )}
 
-      <form className="add-form" onSubmit={handleAdd}>
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="項目を追加"
-          enterKeyHint="done"
-        />
-        <button type="submit" aria-label="追加">
-          ＋
-        </button>
-      </form>
+      <ul className="items">{unchecked.map(renderRow)}</ul>
 
-      <ul className="items">{unchecked.map(renderItem)}</ul>
+      <button className="add-row" onClick={() => addAfter(unchecked.at(-1) ?? null)}>
+        ＋ リストに追加
+      </button>
 
       {checked.length > 0 && (
         <section className="checked-section">
           <p className="section-label">チェック済み {checked.length}件</p>
-          <ul className="items">{checked.map(renderItem)}</ul>
+          <ul className="items">{checked.map(renderRow)}</ul>
         </section>
       )}
     </div>

@@ -385,3 +385,65 @@ li.item .delete-btn {
   color: var(--text);
   cursor: pointer;
 }
+
+/* Keep風インライン編集 */
+.item-input {
+  flex: 1;
+  font-size: 1rem;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  outline: none;
+  padding: 2px 0;
+  min-width: 0;
+}
+
+li.item.checked .item-input {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.add-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 1rem;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+
+/* トークン一覧 */
+.token-list {
+  list-style: none;
+  margin-top: 12px;
+}
+
+.token-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.copy-btn.danger {
+  color: var(--danger);
+}
+
+/* MCPクライアント選択タブ */
+.client-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0 8px;
+  flex-wrap: wrap;
+}
+
+.copy-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}

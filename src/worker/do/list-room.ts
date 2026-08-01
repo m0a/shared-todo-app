@@ -198,8 +198,17 @@ export class ListRoom extends DurableObject<Env> {
     switch (msg.type) {
       case 'add_item': {
         const current = await this.loadItems(db, listId);
-        const maxPos = current.reduce((m, i) => Math.max(m, i.position), 0);
-        const item: Item = { id: nanoid(), text: msg.text, checked: false, position: maxPos + 1 };
+        // afterId 指定時はその直後（fractional indexing）、なければ末尾
+        let position: number;
+        const afterIdx = msg.afterId ? current.findIndex((i) => i.id === msg.afterId) : -1;
+        if (afterIdx >= 0) {
+          const after = current[afterIdx]!;
+          const next = current[afterIdx + 1];
+          position = next ? (after.position + next.position) / 2 : after.position + 1;
+        } else {
+          position = current.reduce((m, i) => Math.max(m, i.position), 0) + 1;
+        }
+        const item: Item = { id: nanoid(), text: msg.text, checked: false, position };
         await db.insert(items).values({
           id: item.id,
           listId,

@@ -16,6 +16,13 @@ interface ListRow {
   title: string;
 }
 
+interface TokenRow {
+  id: string;
+  label: string | null;
+  createdAt: number;
+  lastUsedAt: number | null;
+}
+
 export function Home() {
   const [me, setMe] = useState<Me | null | undefined>(undefined); // undefined=読込中
   const [myLists, setMyLists] = useState<ListRow[]>([]);
@@ -25,6 +32,8 @@ export function Home() {
   const [error, setError] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [issuedToken, setIssuedToken] = useState<string | null>(null);
+  const [tokens, setTokens] = useState<TokenRow[]>([]);
+  const [mcpClient, setMcpClient] = useState<'claude-code' | 'gemini-cli' | 'json'>('claude-code');
 
   useEffect(() => {
     void refresh();
@@ -37,6 +46,8 @@ export function Home() {
     if (user) {
       const listsRes = await api.api.lists.$get();
       if (listsRes.ok) setMyLists((await listsRes.json()).lists);
+      const tokensRes = await api.api.tokens.$get();
+      if (tokensRes.ok) setTokens((await tokensRes.json()).tokens);
     }
   }
 
@@ -124,7 +135,17 @@ export function Home() {
     const label = prompt('トークンの用途（例: Claude Code）');
     if (!label?.trim()) return;
     const res = await api.api.tokens.$post({ json: { label: label.trim() } });
-    if (res.ok) setIssuedToken((await res.json()).token);
+    if (res.ok) {
+      setIssuedToken((await res.json()).token);
+      const tokensRes = await api.api.tokens.$get();
+      if (tokensRes.ok) setTokens((await tokensRes.json()).tokens);
+    }
+  }
+
+  async function handleRevokeToken(t: TokenRow) {
+    if (!confirm(`トークン「${t.label ?? t.id}」を無効化しますか？このトークンを使うMCPは動かなくなります。`)) return;
+    const res = await api.api.tokens[':id'].$delete({ param: { id: t.id } });
+    if (res.ok) setTokens((ts) => ts.filter((x) => x.id !== t.id));
   }
 
   if (me === undefined) return null; // 読込中
@@ -201,14 +222,69 @@ export function Home() {
         <button className="copy-btn" onClick={handleIssueToken}>
           MCPトークン発行
         </button>
+        {tokens.length > 0 && (
+          <ul className="token-list">
+            {tokens.map((t) => (
+              <li key={t.id} className="token-row">
+                <div className="history-main">
+                  <span className="history-desc">{t.label ?? '(無題)'}</span>
+                  <span className="history-meta">
+                    発行 {new Date(t.createdAt).toLocaleDateString('ja-JP')}・最終使用{' '}
+                    {t.lastUsedAt ? new Date(t.lastUsedAt).toLocaleDateString('ja-JP') : 'なし'}
+                  </span>
+                </div>
+                <button className="copy-btn danger" onClick={() => handleRevokeToken(t)}>
+                  無効化
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
         {issuedToken && (
           <div className="token-box">
-            <p>
-              このトークンは今回しか表示されません。下のコマンドをコピーして Claude Code に登録してください（タップでコピー）。
-            </p>
+            <p>このトークンは今回しか表示されません。使うツールを選んで、設定をコピーしてください（タップでコピー）。</p>
+            <div className="client-tabs">
+              {(
+                [
+                  ['claude-code', 'Claude Code'],
+                  ['gemini-cli', 'Gemini CLI'],
+                  ['json', 'JSON設定（Cursor等）'],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  className={`copy-btn${mcpClient === key ? ' active' : ''}`}
+                  onClick={() => setMcpClient(key)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <code onClick={(e) => navigator.clipboard.writeText((e.target as HTMLElement).textContent ?? '')}>
-              {`claude mcp add --scope user --transport http shared-todo ${location.origin}/api/mcp --header "Authorization: Bearer ${issuedToken}"`}
+              {mcpClient === 'claude-code' &&
+                `claude mcp add --scope user --transport http shared-todo ${location.origin}/api/mcp --header "Authorization: Bearer ${issuedToken}"`}
+              {mcpClient === 'gemini-cli' &&
+                `gemini mcp add --transport http --header "Authorization: Bearer ${issuedToken}" shared-todo ${location.origin}/api/mcp`}
+              {mcpClient === 'json' &&
+                JSON.stringify(
+                  {
+                    mcpServers: {
+                      'shared-todo': {
+                        type: 'http',
+                        url: `${location.origin}/api/mcp`,
+                        headers: { Authorization: `Bearer ${issuedToken}` },
+                      },
+                    },
+                  },
+                  null,
+                  2,
+                )}
             </code>
+            {mcpClient === 'json' && (
+              <p className="history-meta">
+                Cursor / VS Code / Claude Desktop など、mcpServers 形式の設定ファイルを使うツール向け。キー名はツールのドキュメントに合わせて調整してください。
+              </p>
+            )}
           </div>
         )}
       </section>

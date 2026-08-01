@@ -112,6 +112,33 @@ const app = new Hono<{ Bindings: Env }>()
       return c.json({ token }, 201);
     },
   )
+  .get('/api/tokens', async (c) => {
+    const userId = await getSessionUserId(c, c.env.SESSION_SECRET);
+    if (!userId) return c.json({ error: 'unauthorized' }, 401);
+    const db = drizzle(c.env.DB);
+    const rows = await db
+      .select({
+        id: apiTokens.id,
+        label: apiTokens.label,
+        createdAt: apiTokens.createdAt,
+        lastUsedAt: apiTokens.lastUsedAt,
+      })
+      .from(apiTokens)
+      .where(eq(apiTokens.userId, userId))
+      .orderBy(desc(apiTokens.createdAt));
+    return c.json({ tokens: rows });
+  })
+  .delete('/api/tokens/:id', async (c) => {
+    const userId = await getSessionUserId(c, c.env.SESSION_SECRET);
+    if (!userId) return c.json({ error: 'unauthorized' }, 401);
+    const db = drizzle(c.env.DB);
+    const [deleted] = await db
+      .delete(apiTokens)
+      .where(and(eq(apiTokens.id, c.req.param('id')), eq(apiTokens.userId, userId)))
+      .returning({ id: apiTokens.id });
+    if (!deleted) return c.json({ error: 'not found' }, 404);
+    return c.json({ ok: true });
+  })
 
   // リストメタ取得（共有URL経由・認証不要。作成者かどうかも返す）
   .get('/api/l/:shareToken', async (c) => {
