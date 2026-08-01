@@ -218,4 +218,4 @@ shared-todo-app/
 3. **認証**: パスキー登録/ログイン + リスト作成/削除/一覧 ✅（2026-08-01完了。公開鍵はbase64url TEXT保存 — WorkersにBufferが無いため）
 4. **履歴**: revisions 記録 + 履歴画面 + restore（Undo） ✅（2026-08-01完了）
 5. **MCP**: エンドポイント + トークン発行UI ✅（2026-08-01完了。`~/.claude.json` 登録は本番デプロイ後）
-6. **仕上げ**: デプロイ（workers.dev）、cdp-e2e でパスキーE2E
+6. **仕上げ**: デプロイ ✅（2026-08-01完了。https://shared-todo.abe00makoto.workers.dev、D1 id=59efe4cd-3acc-42e7-91bb-796ae4aa9885、SESSION_SECRETはwrangler secret。本番でパスキー登録/リスト作成/WS同期E2E確認済み）
