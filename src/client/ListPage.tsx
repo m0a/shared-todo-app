@@ -33,6 +33,8 @@ function describeOp(rev: RevisionRow): string {
       return `${text}の色を変更`;
     case 'set_colors':
       return `${detail.count}件の色を変更`;
+    case 'set_checked_many':
+      return `${detail.count}件を${detail.checked ? 'チェック' : 'チェック解除'}`;
     case 'reorder':
       return '一括並べ替え';
     case 'restore':

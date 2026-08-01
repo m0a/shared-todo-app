@@ -150,6 +150,10 @@ function applyOp(items: Item[], op: Op): Item[] {
     }
     case 'reorder':
       return op.items;
+    case 'set_checked_many': {
+      const ids = new Set(op.itemIds);
+      return items.map((i) => (ids.has(i.id) ? { ...i, checked: op.checked } : i));
+    }
   }
 }
 
@@ -165,6 +169,8 @@ export function affectedItemIds(op: Op): string[] {
       return [op.itemId];
     case 'set_colors':
       return op.changes.map((c) => c.itemId);
+    case 'set_checked_many':
+      return op.itemIds;
     case 'delete_item':
     case 'reorder':
       return [];

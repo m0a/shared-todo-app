@@ -84,6 +84,13 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
       .max(100),
     clientOpId: z.string(),
   }),
+  // 一括チェックON/OFF（1世代・1ブロードキャスト）
+  z.object({
+    type: z.literal('set_checked_many'),
+    itemIds: z.array(z.string()).min(1).max(200),
+    checked: z.boolean(),
+    clientOpId: z.string(),
+  }),
   // 一括並べ替え: 並べたい順の項目ID（1世代・1ブロードキャスト）
   z.object({
     type: z.literal('reorder'),
@@ -124,6 +131,11 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
         changes: z.array(z.object({ itemId: z.string(), color: itemColorSchema.nullable() })),
       }),
       z.object({ type: z.literal('reorder'), items: z.array(itemSchema) }),
+      z.object({
+        type: z.literal('set_checked_many'),
+        itemIds: z.array(z.string()),
+        checked: z.boolean(),
+      }),
     ]),
     actor: actorSchema,
     clientOpId: z.string().nullable(),

@@ -160,6 +160,42 @@ export async function handleMcpRequest(
   );
 
   server.registerTool(
+    'check_items',
+    {
+      description: '複数の項目にまとめてチェックを付ける（1件ずつのcheck_itemより速い）',
+      inputSchema: { list_id: z.string(), item_ids: z.array(z.string()).min(1).max(200) },
+    },
+    async ({ list_id, item_ids }) => {
+      await ownedList(list_id);
+      await mutate(list_id, {
+        type: 'set_checked_many',
+        itemIds: item_ids,
+        checked: true,
+        clientOpId: crypto.randomUUID(),
+      });
+      return textResult({ ok: true, checked: item_ids.length });
+    },
+  );
+
+  server.registerTool(
+    'uncheck_items',
+    {
+      description: '複数の項目のチェックをまとめて外す',
+      inputSchema: { list_id: z.string(), item_ids: z.array(z.string()).min(1).max(200) },
+    },
+    async ({ list_id, item_ids }) => {
+      await ownedList(list_id);
+      await mutate(list_id, {
+        type: 'set_checked_many',
+        itemIds: item_ids,
+        checked: false,
+        clientOpId: crypto.randomUUID(),
+      });
+      return textResult({ ok: true, unchecked: item_ids.length });
+    },
+  );
+
+  server.registerTool(
     'check_item',
     { description: '項目にチェックを付ける', inputSchema: { list_id: z.string(), item_id: z.string() } },
     async ({ list_id, item_id }) => {

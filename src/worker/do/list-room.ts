@@ -289,6 +289,18 @@ export class ListRoom extends DurableObject<Env> {
         opDetail = { count: msg.changes.length };
         break;
       }
+      case 'set_checked_many': {
+        const stmts = msg.itemIds.map((id) =>
+          db
+            .update(items)
+            .set({ checked: msg.checked, updatedAt: now })
+            .where(and(eq(items.id, id), eq(items.listId, listId))),
+        );
+        await db.batch(stmts as [(typeof stmts)[number], ...(typeof stmts)[number][]]);
+        op = { type: 'set_checked_many', itemIds: msg.itemIds, checked: msg.checked };
+        opDetail = { count: msg.itemIds.length, checked: msg.checked };
+        break;
+      }
       case 'reorder': {
         // 渡された順に 1,2,3... を振り直す。渡されなかった項目は末尾に既存順で続ける
         const current = await this.loadItems(db, listId);
