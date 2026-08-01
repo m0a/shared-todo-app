@@ -144,7 +144,13 @@ const app = new Hono<{ Bindings: Env }>()
   .get('/api/l/:shareToken', async (c) => {
     const db = drizzle(c.env.DB);
     const [list] = await db
-      .select({ id: lists.id, title: lists.title, ownerId: lists.ownerId, createdAt: lists.createdAt })
+      .select({
+        id: lists.id,
+        title: lists.title,
+        ownerId: lists.ownerId,
+        createdAt: lists.createdAt,
+        updatedAt: lists.updatedAt,
+      })
       .from(lists)
       .where(eq(lists.shareToken, c.req.param('shareToken')));
     if (!list) return c.json({ error: 'not found' }, 404);
@@ -152,6 +158,7 @@ const app = new Hono<{ Bindings: Env }>()
     return c.json({
       title: list.title,
       createdAt: list.createdAt,
+      updatedAt: list.updatedAt,
       isOwner: userId !== null && userId === list.ownerId,
     });
   })

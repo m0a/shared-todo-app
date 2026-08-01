@@ -167,6 +167,8 @@ export function ListPage({ shareToken }: { shareToken: string }) {
   const rowRefs = useRef(new Map<string, HTMLLIElement>());
 
   const { title, items, connected, notFound, send } = useListSocket(shareToken, (msg) => {
+    // 何か操作が届いた＝リストが更新された
+    setUpdatedAt(Date.now());
     // 自分が「Enterで行追加」した項目のエコーが来たらフォーカスを移す
     if (msg.op.type === 'add_item' && msg.clientOpId && msg.clientOpId === pendingFocusOpRef.current) {
       pendingFocusOpRef.current = null;
@@ -176,6 +178,7 @@ export function ListPage({ shareToken }: { shareToken: string }) {
 
   const [isOwner, setIsOwner] = useState(false);
   const [createdAt, setCreatedAt] = useState<number | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<RevisionRow[]>([]);
 
@@ -187,6 +190,7 @@ export function ListPage({ shareToken }: { shareToken: string }) {
           const meta = await res.json();
           setIsOwner(meta.isOwner);
           setCreatedAt(meta.createdAt);
+          setUpdatedAt(meta.updatedAt);
         }
       })
       .catch(() => {});
@@ -334,12 +338,14 @@ export function ListPage({ shareToken }: { shareToken: string }) {
             <h1>{title || '…'}</h1>
             {createdAt !== null && (
               <span className="created-at">
-                {new Date(createdAt).toLocaleDateString('ja-JP', {
-                  year: 'numeric',
-                  month: 'numeric',
-                  day: 'numeric',
-                })}
-                作成
+                {new Date(createdAt).toLocaleDateString('ja-JP')}作成
+                {updatedAt !== null &&
+                  `・${new Date(updatedAt).toLocaleString('ja-JP', {
+                    month: 'numeric',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}更新`}
               </span>
             )}
           </div>
