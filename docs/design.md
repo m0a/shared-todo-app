@@ -214,8 +214,8 @@ shared-todo-app/
 ## 実装フェーズ分割
 
 1. **スキャフォールド**: Vite + cloudflare plugin + wrangler.jsonc + D1マイグレーション + 空のDO ✅（2026-08-01完了）
-2. **コア**: ListRoom DO + WS同期 + Keep風UI（匿名アクセスのみ、認証なしで動くところまで）
-3. **認証**: パスキー登録/ログイン + リスト作成/削除/一覧
-4. **履歴**: revisions 記録 + 履歴画面 + restore（Undo）
-5. **MCP**: エンドポイント + トークン発行UI + `~/.claude.json` 登録
+2. **コア**: ListRoom DO + WS同期 + Keep風UI ✅（2026-08-01完了）
+3. **認証**: パスキー登録/ログイン + リスト作成/削除/一覧 ✅（2026-08-01完了。公開鍵はbase64url TEXT保存 — WorkersにBufferが無いため）
+4. **履歴**: revisions 記録 + 履歴画面 + restore（Undo） ✅（2026-08-01完了）
+5. **MCP**: エンドポイント + トークン発行UI ✅（2026-08-01完了。`~/.claude.json` 登録は本番デプロイ後）
 6. **仕上げ**: デプロイ（workers.dev）、cdp-e2e でパスキーE2E
