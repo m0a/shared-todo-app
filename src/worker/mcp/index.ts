@@ -149,6 +149,37 @@ export async function handleMcpRequest(
   );
 
   server.registerTool(
+    'move_item',
+    {
+      description: '項目を並べ替える。after_item_id の直後に移動する（省略時は先頭へ）',
+      inputSchema: {
+        list_id: z.string(),
+        item_id: z.string(),
+        after_item_id: z.string().optional().describe('この項目の直後に移動する。省略すると先頭'),
+      },
+    },
+    async ({ list_id, item_id, after_item_id }) => {
+      await ownedList(list_id);
+      const rows = await db
+        .select({ id: items.id, position: items.position })
+        .from(items)
+        .where(eq(items.listId, list_id))
+        .orderBy(asc(items.position));
+      let position: number;
+      if (after_item_id) {
+        const idx = rows.findIndex((r) => r.id === after_item_id);
+        if (idx < 0) throw new Error(`item not found: ${after_item_id}`);
+        const next = rows[idx + 1];
+        position = next ? (rows[idx]!.position + next.position) / 2 : rows[idx]!.position + 1;
+      } else {
+        position = (rows[0]?.position ?? 1) - 1;
+      }
+      await mutate(list_id, { type: 'move_item', itemId: item_id, position, clientOpId: crypto.randomUUID() });
+      return textResult({ ok: true });
+    },
+  );
+
+  server.registerTool(
     'uncheck_item',
     { description: '項目のチェックを外す', inputSchema: { list_id: z.string(), item_id: z.string() } },
     async ({ list_id, item_id }) => {

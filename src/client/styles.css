@@ -454,9 +454,13 @@ li.item.checked .item-input {
   cursor: grab;
   touch-action: none;
   user-select: none;
-  padding: 4px 2px;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  /* タッチしやすいよう当たり判定を大きめに */
+  padding: 12px 10px;
+  margin: -8px -4px;
   flex-shrink: 0;
-  font-size: 0.9rem;
+  font-size: 1rem;
 }
 
 li.item.dragging {
