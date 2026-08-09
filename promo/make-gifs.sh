@@ -13,4 +13,4 @@ gif() {
 }
 
 gif out/readme-ai.mp4   ../docs/media/ai.gif   14 460
-gif out/readme-sync.mp4 ../docs/media/sync.gif 14 900
+gif out/readme-sync.mp4 ../docs/media/sync.gif 12 820

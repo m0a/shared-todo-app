@@ -1,30 +1,40 @@
 import React from 'react';
 import { AbsoluteFill, OffthreadVideo, Sequence, staticFile, useVideoConfig } from 'remotion';
-import { Caption, Prompt, PromptLabel } from './components';
+import { Caption, PhoneLabel, PHONE_CENTER, Prompt, PromptLabel, TapRipple } from './components';
 
 /**
  * 素材はすべて 1920x1080 の実画面録画（撮影台に本番アプリを iframe で読み込んで録画したもの）。
  * 元動画の時刻(秒) → frames(30fps) は SRC() で書く。
  *
  * cut-ai.mp4 の出来事:  追加 11.8 / 17.3 / 27.4、並べ替え 41.9、色分け 49.4
- * cut-sync.mp4 の出来事: 4人分のチェック 3.5〜6.5、下へ移動 6.5〜13.5
+ * cut-sync.mp4 の出来事: 4人分のチェック 4.83〜6.86（撮影スクリプトが記録）、3秒後に順次「チェック済み」へ移動
  */
 export const SRC = (sec: number) => Math.round(sec * 30);
 
 const AI = { start: 10.8, end: 30.0, add1: 11.8, add2: 17.3, add3: 27.4 };
 const ORG = { start: 40.9, end: 52.5, color: 49.4 };
-const SYNC = { start: 3.2, end: 14.0 };
+const SYNC = { start: 4.0, end: 12.0, tap1: 4.8 };
+
+/** 撮影スクリプトが記録した実際のタップ（1タップ目からの秒数）。誰がどこを触ったかを動画に出すのに使う */
+const TAPS = [
+  { off: 0.0, x: 420, y: 275, who: 'あなた', side: 'left' as const },
+  { off: 0.665, x: 1147, y: 755, who: '家族', side: 'right' as const },
+  { off: 1.324, x: 420, y: 371, who: 'あなた', side: 'left' as const },
+  { off: 2.005, x: 1147, y: 851, who: '家族', side: 'right' as const },
+];
 
 /** 素材の一部を切り出して画面いっぱいに使う（README用の小さい画面向け） */
 export type Rect = { x: number; y: number; w: number; h: number };
 
-const Video: React.FC<{ src: string; from: number; to: number; rate: number; rect?: Rect }> = ({
-  src,
-  from,
-  to,
-  rate,
-  rect,
-}) => {
+const Video: React.FC<{
+  src: string;
+  from: number;
+  to: number;
+  rate: number;
+  rect?: Rect;
+  /** 素材(1920x1080)の座標系で重ねるもの。ズームしても一緒に拡大される */
+  overlay?: React.ReactNode;
+}> = ({ src, from, to, rate, rect, overlay }) => {
   const video = (
     <OffthreadVideo
       src={staticFile(src)}
@@ -39,8 +49,24 @@ const Video: React.FC<{ src: string; from: number; to: number; rate: number; rec
       }
     />
   );
-  if (!rect) return video;
-  return <Zoomed rect={rect}>{video}</Zoomed>;
+  const layer = overlay ? (
+    <div style={{ position: 'absolute', left: rect ? -rect.x : 0, top: rect ? -rect.y : 0, width: 1920, height: 1080 }}>
+      {overlay}
+    </div>
+  ) : null;
+  if (!rect)
+    return (
+      <AbsoluteFill>
+        {video}
+        {layer}
+      </AbsoluteFill>
+    );
+  return (
+    <Zoomed rect={rect}>
+      {video}
+      {layer}
+    </Zoomed>
+  );
 };
 
 /** rect の範囲が composition いっぱいになるよう拡大する */
@@ -111,14 +137,54 @@ export const SceneOrganize: React.FC<{ rate?: number }> = ({ rate = 2.3 }) => (
 
 /** 2画面リアルタイム同期のシーン */
 export const SceneSync: React.FC<{ rate?: number; caption?: boolean; rect?: Rect }> = ({
-  rate = 1.35,
+  rate = 1.15,
   caption = true,
   rect,
 }) => {
-  const half = Math.round(4.4 * (30 / rate));
+  const half = Math.round(3.6 * (30 / rate));
+  // タップ時刻(素材の秒) → このシーン内のフレーム
+  const tapFrame = (off: number) => Math.round((SYNC.tap1 + off - SYNC.start) * (30 / rate));
+  const activeFrames = Math.round(1.0 * (30 / rate));
+  const framesOf = (side: 'left' | 'right') =>
+    TAPS.filter((t) => t.side === side).map((t) => tapFrame(t.off));
+
   return (
     <AbsoluteFill>
-      <Video src="cut-sync.mp4" from={SRC(SYNC.start)} to={SRC(SYNC.end)} rate={rate} rect={rect} />
+      <Video
+        src="cut-sync.mp4"
+        from={SRC(SYNC.start)}
+        to={SRC(SYNC.end)}
+        rate={rate}
+        rect={rect}
+        overlay={
+          <>
+            {TAPS.map((t, i) => (
+              <Sequence
+                key={i}
+                from={tapFrame(t.off)}
+                durationInFrames={Math.round(0.6 * (30 / rate))}
+                layout="none"
+              >
+                <TapRipple x={t.x} y={t.y} />
+              </Sequence>
+            ))}
+            <PhoneLabel
+              centerX={PHONE_CENTER.left}
+              name="あなた"
+              who="あなた"
+              taps={framesOf('left')}
+              activeFrames={activeFrames}
+            />
+            <PhoneLabel
+              centerX={PHONE_CENTER.right}
+              name="家族のスマホ"
+              who="家族"
+              taps={framesOf('right')}
+              activeFrames={activeFrames}
+            />
+          </>
+        }
+      />
       {caption ? (
         <>
           <Sequence durationInFrames={half}>

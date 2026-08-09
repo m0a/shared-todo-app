@@ -50,7 +50,7 @@ export const Caption: React.FC<{
   );
 };
 
-/** 左側に出す「AIへの指示」の吹き出し */
+/** 左側に出す「AIへの指示」の吹き出し。左下にしっぽを付けて会話らしく見せる */
 export const Prompt: React.FC<{ children: React.ReactNode; delay?: number; top: number }> = ({
   children,
   delay = 0,
@@ -61,27 +61,38 @@ export const Prompt: React.FC<{ children: React.ReactNode; delay?: number; top: 
     <div
       style={{
         position: 'absolute',
-        left: 110,
+        left: 128,
         top,
         opacity,
         transform: `translateY(${translateY}px)`,
-        maxWidth: 620,
+        maxWidth: 740,
+        filter: 'drop-shadow(0 14px 30px rgba(26, 115, 232, 0.30))',
       }}
     >
       <div
         style={{
+          position: 'relative',
+          display: 'inline-block',
           background: COLOR.accent,
           color: '#fff',
           fontFamily: FONT,
           fontSize: 38,
           fontWeight: 500,
           lineHeight: 1.45,
-          padding: '22px 30px',
-          borderRadius: '22px 22px 22px 6px',
-          boxShadow: '0 14px 34px rgba(26, 115, 232, 0.32)',
+          padding: '22px 32px',
+          borderRadius: '26px 26px 26px 6px',
         }}
       >
         {children}
+        {/* しっぽ。吹き出しの左下から下向きに伸ばす */}
+        <svg
+          width="26"
+          height="28"
+          viewBox="0 0 26 28"
+          style={{ position: 'absolute', left: -24, bottom: 0, display: 'block' }}
+        >
+          <path d="M26 28 L26 0 C26 15 17 25 0 28 Z" fill={COLOR.accent} />
+        </svg>
       </div>
     </div>
   );
@@ -109,6 +120,71 @@ export const PromptLabel: React.FC<{ delay?: number; top: number; children: Reac
       }}
     >
       {children}
+    </div>
+  );
+};
+
+/** 撮影台での端末の中心X（1920x1080の素材内） */
+export const PHONE_CENTER = { left: 597, right: 1322 };
+
+/** タップした場所に出す波紋。どの行を触ったかを示す */
+export const TapRipple: React.FC<{ x: number; y: number }> = ({ x, y }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const t = interpolate(frame, [0, 0.5 * fps], [0, 1], { extrapolateRight: 'clamp' });
+  const size = 40 + t * 120;
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: x - size / 2,
+        top: y - size / 2,
+        width: size,
+        height: size,
+        borderRadius: '50%',
+        border: `5px solid ${COLOR.accent}`,
+        opacity: interpolate(t, [0, 1], [0.85, 0]),
+      }}
+    />
+  );
+};
+
+/**
+ * 端末の上に出す名前。素材側では名前を消してあり、ここで描いている。
+ * その人が操作した瞬間だけ青いピルになるので、どちらが動かしたのかが分かる。
+ */
+export const PhoneLabel: React.FC<{
+  centerX: number;
+  name: string;
+  who: string;
+  /** その人がタップしたフレーム番号（シーン先頭からの絶対フレーム） */
+  taps: number[];
+  activeFrames: number;
+}> = ({ centerX, name, who, taps, activeFrames }) => {
+  const frame = useCurrentFrame();
+  const hit = taps.find((f) => frame >= f && frame < f + activeFrames);
+  const active = hit !== undefined;
+  const since = active ? frame - (hit as number) : 0;
+  const pop = active ? interpolate(since, [0, 5], [0.92, 1], { extrapolateRight: 'clamp' }) : 1;
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: centerX,
+        top: 26,
+        transform: `translateX(-50%) scale(${pop})`,
+        fontFamily: FONT,
+        fontSize: active ? 34 : 30,
+        fontWeight: active ? 600 : 500,
+        whiteSpace: 'nowrap',
+        padding: active ? '12px 30px' : '10px 20px',
+        borderRadius: 999,
+        background: active ? COLOR.accent : 'transparent',
+        color: active ? '#fff' : COLOR.text,
+        boxShadow: active ? '0 12px 30px rgba(26, 115, 232, 0.35)' : 'none',
+      }}
+    >
+      {active ? `${who}がチェック` : name}
     </div>
   );
 };

@@ -23,11 +23,11 @@ const XPromo: React.FC = () => (
       <SceneOrganize />
     </Sequence>
 
-    <Sequence from={581} durationInFrames={240}>
+    <Sequence from={581} durationInFrames={209}>
       <SceneSync />
     </Sequence>
 
-    <Sequence from={821} durationInFrames={139}>
+    <Sequence from={790} durationInFrames={130}>
       <CardScreen
         title={<>Shared Todo</>}
         sub={
@@ -53,7 +53,7 @@ const ReadmeAI: React.FC = () => (
 /** README用: 2画面同期に寄る */
 const ReadmeSync: React.FC = () => (
   <AbsoluteFill style={{ backgroundColor: '#eef2f8' }}>
-    <SceneSync rate={1.35} caption={false} rect={{ x: 270, y: 80, w: 1380, h: 776 }} />
+    <SceneSync rate={1.15} caption={false} rect={{ x: 250, y: 0, w: 1420, h: 1065 }} />
   </AbsoluteFill>
 );
 
@@ -75,11 +75,11 @@ const FullDemo: React.FC = () => (
       <SceneOrganize rate={1} />
     </Sequence>
 
-    <Sequence from={1014} durationInFrames={324}>
+    <Sequence from={1014} durationInFrames={240}>
       <SceneSync rate={1} />
     </Sequence>
 
-    <Sequence from={1338} durationInFrames={132}>
+    <Sequence from={1254} durationInFrames={132}>
       <CardScreen
         title={<>誰でもすぐ使えます</>}
         sub={
@@ -97,9 +97,9 @@ const FullDemo: React.FC = () => (
 
 export const RemotionRoot: React.FC = () => (
   <>
-    <Composition id="XPromo" component={XPromo} durationInFrames={960} fps={30} width={1920} height={1080} />
+    <Composition id="XPromo" component={XPromo} durationInFrames={920} fps={30} width={1920} height={1080} />
     <Composition id="ReadmeAI" component={ReadmeAI} durationInFrames={303} fps={30} width={640} height={960} />
-    <Composition id="ReadmeSync" component={ReadmeSync} durationInFrames={240} fps={30} width={1280} height={720} />
-    <Composition id="FullDemo" component={FullDemo} durationInFrames={1470} fps={30} width={1920} height={1080} />
+    <Composition id="ReadmeSync" component={ReadmeSync} durationInFrames={209} fps={30} width={1280} height={960} />
+    <Composition id="FullDemo" component={FullDemo} durationInFrames={1386} fps={30} width={1920} height={1080} />
   </>
 );
