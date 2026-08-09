@@ -154,7 +154,11 @@ export function Home() {
     return (
       <div className="container home">
         <h1>Shared Todo</h1>
-        <p className="home-sub">家族と共有できる買い物・Todoリスト</p>
+        <p className="home-sub">
+          <b>AIエージェントと共有できる</b>買い物・Todoリスト。
+          <br />
+          MCPでつないだAIと、家族と、同じリストをリアルタイムに使えます。
+        </p>
         <div className="auth-box">
           <div className="auth-row">
             <input
@@ -173,6 +177,77 @@ export function Home() {
           </button>
           {error && <p className="error-inline">{error}</p>}
         </div>
+
+        <section className="guide">
+          <div className="guide-card">
+            <p className="guide-card-lead">冷蔵庫を見ながら言うだけで、買い物リストができあがる</p>
+            <p>
+              ログイン後に発行する<b>MCPトークン</b>を Claude Code・Gemini CLI・Cursor などに登録するだけ。
+              AIが同じリストを直接読み書きし、スーパーで家族が開いている画面にもその場で反映されます。
+            </p>
+            <ul className="mcp-examples">
+              <li>牛乳ない、卵もない、あと洗剤も。リストに足していって</li>
+              <li>スーパーの売り場順に並べ替えて</li>
+              <li>野菜・肉・日用品で色分けして</li>
+              <li>買い物リストに何が残ってる？</li>
+            </ul>
+            <p>
+              言いながら足していって、最後に「並べ替えて」「色分けして」と頼めば、
+              売り場を行ったり来たりしない買い物リストになります。
+            </p>
+            <p className="guide-card-note">
+              登録コマンドは発行時にそのままコピーできます。トークンはいつでも無効化できます。
+            </p>
+          </div>
+
+          <div className="guide-card">
+            <p className="guide-card-lead">スーパーでは手分けして、同時に買える</p>
+            <p>
+              チェックは全員の画面にその場で反映されます。「こっちは野菜、そっちは日用品」と分かれても、
+              誰かがカゴに入れた瞬間にリストから消えるので、<b>同じものを2つ買ってしまうことがありません</b>。
+              他の人が触った行は一瞬光るので、いま誰が動いているのかも分かります。
+            </p>
+            <p className="guide-card-note">
+              押し間違えても、チェックした項目は3秒その場に残ってから下へ移動します。
+            </p>
+          </div>
+
+          <h2>3ステップで使えます</h2>
+          <ol className="guide-steps">
+            <li>
+              <b>パスキーで登録する</b>
+              上の欄に表示名を入れてボタンを押すと、端末の指紋・顔認証だけで登録できます。
+              メールアドレスもパスワードも要りません。
+            </li>
+            <li>
+              <b>リストを作る</b>
+              「日用品」「実家用」など、用途ごとにいくつでも作れます。
+            </li>
+            <li>
+              <b>AIと家族につなぐ</b>
+              AIには「MCPトークン発行」で出たコマンドを登録。家族にはリスト横の「共有URL」をLINEなどで送るだけ。
+              受け取った人は<b>ログイン不要</b>でそのまま追加・チェックできます。
+            </li>
+          </ol>
+
+          <h2>できること</h2>
+          <ul className="guide-features">
+            <li>
+              <b>メモ帳と同じ操作感</b>
+              行に直接入力して Enter で次の行。チェックした項目は下の「チェック済み」にまとまります。
+              アプリのインストールは不要で、ブラウザでそのまま使えます。
+            </li>
+            <li>
+              <b>色分け・並べ替え</b>
+              項目ごとに色を付けたり、左の ⠿ をドラッグして順番を入れ替えられます。
+            </li>
+            <li>
+              <b>消しても戻せる</b>
+              削除した項目はゴミ箱に30日残ります。作成者は「履歴」からリスト全体を過去の状態に戻せます。
+              AIがやった変更も「AI」として履歴に残ります。
+            </li>
+          </ul>
+        </section>
       </div>
     );
   }
@@ -216,9 +291,18 @@ export function Home() {
           </li>
         ))}
       </ul>
-      {myLists.length === 0 && <p className="empty-msg">リストがありません。上から作成できます。</p>}
+      {myLists.length === 0 ? (
+        <p className="empty-msg">リストがありません。上の欄に名前を入れて ＋ で作成できます。</p>
+      ) : (
+        <p className="hint-msg">「共有URL」をLINEなどで送ると、相手はログイン不要でそのまま書き込めます。</p>
+      )}
 
       <section className="mcp-section">
+        <h2 className="section-title">AI連携（MCP）</h2>
+        <p className="hint-msg">
+          トークンを発行して Claude Code などに登録すると、AIからリストを読み書きできます。
+          「カレーの材料をリストに入れて」のように頼めます。
+        </p>
         <button className="copy-btn" onClick={handleIssueToken}>
           MCPトークン発行
         </button>

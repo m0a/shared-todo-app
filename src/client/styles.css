@@ -166,7 +166,7 @@ li.item .delete-btn {
 
 /* ホーム画面 */
 .home {
-  padding-top: 15vh;
+  padding-top: 8vh;
   text-align: center;
 }
 
@@ -294,6 +294,163 @@ li.item .delete-btn {
   color: var(--text-muted);
   text-align: center;
   padding: 24px;
+}
+
+/* トップの使い方ガイド */
+.guide {
+  max-width: 400px;
+  margin: 48px auto 0;
+  text-align: left;
+}
+
+.guide h2 {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--text);
+  margin: 32px 0 12px;
+}
+
+.guide h2:first-child {
+  margin-top: 0;
+}
+
+.guide-steps,
+.guide-features {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.guide-steps {
+  list-style: none;
+  counter-reset: guide-step;
+}
+
+.guide-steps li,
+.guide-features li {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.guide-steps li {
+  counter-increment: guide-step;
+  padding-left: 44px;
+  position: relative;
+}
+
+.guide-steps li::before {
+  content: counter(guide-step);
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.75rem;
+  line-height: 22px;
+  text-align: center;
+}
+
+.guide-features {
+  list-style: none;
+}
+
+.guide-steps b,
+.guide-features b {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.guide-steps li > b:first-child,
+.guide-features li > b:first-child {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 0.9rem;
+}
+
+/* 目玉の機能カード */
+.guide-card {
+  background: color-mix(in srgb, var(--accent) 8%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: 12px;
+  padding: 16px;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.guide-card + .guide-card {
+  margin-top: 12px;
+}
+
+.guide-card p {
+  margin-bottom: 10px;
+}
+
+.guide-card p:last-child {
+  margin-bottom: 0;
+}
+
+.guide-card-lead {
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.guide-card b {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.mcp-examples {
+  list-style: none;
+  margin: 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mcp-examples li {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 8px 12px;
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.mcp-examples li::before {
+  content: '「';
+}
+
+.mcp-examples li::after {
+  content: '」';
+}
+
+.guide-card-note {
+  font-size: 0.75rem;
+}
+
+/* 補足テキスト */
+.hint-msg {
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  margin: 8px 0;
+}
+
+.section-title {
+  font-size: 0.95rem;
+  font-weight: 500;
+  margin-bottom: 4px;
 }
 
 /* 履歴パネル */
