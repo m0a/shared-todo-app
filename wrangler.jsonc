@@ -23,6 +23,20 @@
       "new_sqlite_classes": ["ListRoom"]
     }
   ],
+  // 公開URLなので、アカウント作成とリスト作成には最低限の歯止めを入れる。
+  // Cloudflareのロケーション単位のカウントなので厳密ではないが、乱造は防げる。
+  "ratelimits": [
+    {
+      "name": "SIGNUP_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 5, "period": 60 }
+    },
+    {
+      "name": "CREATE_LIMITER",
+      "namespace_id": "1002",
+      "simple": { "limit": 20, "period": 60 }
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",

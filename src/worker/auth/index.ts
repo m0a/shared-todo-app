@@ -17,6 +17,23 @@ import { users, credentials } from '../db/schema';
 
 import { isoBase64URL } from '@simplewebauthn/server/helpers';
 
+/**
+ * アクセス元の識別子。公開URLなのでアカウント作成の回数制限に使う。
+ * ローカル開発ではヘッダが無いので固定値になる。
+ */
+function clientKey(c: { req: { header: (name: string) => string | undefined } }): string {
+  return c.req.header('CF-Connecting-IP') ?? 'local';
+}
+
+/**
+ * https のときだけ Secure を付ける。
+ * 本番(workers.dev)は常に https。開発ではVPN経由の http で開くことがあり、
+ * Secure を固定で付けるとブラウザにCookieを捨てられてしまう。
+ */
+function isSecure(url: string): boolean {
+  return new URL(url).protocol === 'https:';
+}
+
 const SESSION_COOKIE = 'session';
 const CHALLENGE_COOKIE = 'webauthn_challenge';
 const SESSION_MAX_AGE = 60 * 60 * 24 * 30; // 30日
@@ -40,6 +57,8 @@ export function createAuthApp() {
       '/register/options',
       zValidator('json', z.object({ displayName: z.string().min(1).max(50) })),
       async (c) => {
+        const { success } = await c.env.SIGNUP_LIMITER.limit({ key: clientKey(c) });
+        if (!success) return c.json({ error: 'too many requests' }, 429);
         const { displayName } = c.req.valid('json');
         const { rpID } = rpFromRequest(c.req.url);
         const userId = nanoid();
@@ -56,12 +75,14 @@ export function createAuthApp() {
           CHALLENGE_COOKIE,
           JSON.stringify({ challenge: options.challenge, userId, displayName }),
           c.env.SESSION_SECRET,
-          { httpOnly: true, sameSite: 'Lax', path: '/', maxAge: 300 },
+          { httpOnly: true, secure: isSecure(c.req.url), sameSite: 'Lax', path: '/', maxAge: 300 },
         );
         return c.json(options);
       },
     )
     .post('/register/verify', async (c) => {
+      const { success } = await c.env.SIGNUP_LIMITER.limit({ key: clientKey(c) });
+      if (!success) return c.json({ error: 'too many requests' }, 429);
       const body = (await c.req.json()) as RegistrationResponseJSON;
       const stored = await getSignedCookie(c, c.env.SESSION_SECRET, CHALLENGE_COOKIE);
       if (!stored) return c.json({ error: 'challenge expired' }, 400);
@@ -97,9 +118,10 @@ export function createAuthApp() {
         }),
       ]);
 
-      deleteCookie(c, CHALLENGE_COOKIE, { path: '/' });
+      deleteCookie(c, CHALLENGE_COOKIE, { path: '/', secure: isSecure(c.req.url) });
       await setSignedCookie(c, SESSION_COOKIE, userId, c.env.SESSION_SECRET, {
         httpOnly: true,
+        secure: isSecure(c.req.url),
         sameSite: 'Lax',
         path: '/',
         maxAge: SESSION_MAX_AGE,
@@ -116,7 +138,7 @@ export function createAuthApp() {
         CHALLENGE_COOKIE,
         JSON.stringify({ challenge: options.challenge }),
         c.env.SESSION_SECRET,
-        { httpOnly: true, sameSite: 'Lax', path: '/', maxAge: 300 },
+        { httpOnly: true, secure: isSecure(c.req.url), sameSite: 'Lax', path: '/', maxAge: 300 },
       );
       return c.json(options);
     })
@@ -150,9 +172,10 @@ export function createAuthApp() {
         .set({ counter: verification.authenticationInfo.newCounter })
         .where(eq(credentials.id, cred.id));
 
-      deleteCookie(c, CHALLENGE_COOKIE, { path: '/' });
+      deleteCookie(c, CHALLENGE_COOKIE, { path: '/', secure: isSecure(c.req.url) });
       await setSignedCookie(c, SESSION_COOKIE, cred.userId, c.env.SESSION_SECRET, {
         httpOnly: true,
+        secure: isSecure(c.req.url),
         sameSite: 'Lax',
         path: '/',
         maxAge: SESSION_MAX_AGE,
@@ -171,7 +194,7 @@ export function createAuthApp() {
       return c.json({ user: { id: user.id, displayName: user.displayName } });
     })
     .post('/logout', (c) => {
-      deleteCookie(c, SESSION_COOKIE, { path: '/' });
+      deleteCookie(c, SESSION_COOKIE, { path: '/', secure: isSecure(c.req.url) });
       return c.json({ ok: true });
     });
 }

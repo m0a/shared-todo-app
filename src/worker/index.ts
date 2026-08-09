@@ -47,6 +47,9 @@ const app = new Hono<{ Bindings: Env }>()
     async (c) => {
       const userId = await getSessionUserId(c, c.env.SESSION_SECRET);
       if (!userId) return c.json({ error: 'unauthorized' }, 401);
+      // 1アカウントあたりのリスト乱造を止める
+      const { success } = await c.env.CREATE_LIMITER.limit({ key: `list:${userId}` });
+      if (!success) return c.json({ error: 'too many requests' }, 429);
       const db = drizzle(c.env.DB);
       const now = Date.now();
       const list = {
