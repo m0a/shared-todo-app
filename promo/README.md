@@ -19,13 +19,15 @@ pnpm render:x                   # out/x-promo.mp4
 ./make-gifs.sh                  # out/*.mp4 → ../docs/media/*.gif
 ```
 
-レンダリングにブラウザが要る。このマシンには Chrome があるので、Remotion 専用ブラウザの
-ダウンロードを避けるため `--browser-executable` を渡す:
+レンダリングにブラウザが要る。手元に Chrome があるなら、Remotion 専用ブラウザの
+ダウンロードを避けるため `--browser-executable` でそのパスを渡す:
 
 ```bash
 npx remotion render XPromo out/x-promo.mp4 \
-  --browser-executable=/home/m0a/.agent-browser/browsers/chrome-151.0.7922.47/chrome
+  --browser-executable=/path/to/chrome --concurrency=4
 ```
+
+素材のシークで `No frame found at position` が出たら並列度を下げる。
 
 ## 素材の撮り方
 
