@@ -7,20 +7,20 @@ import { Caption, PhoneLabel, PHONE_CENTER, Prompt, PromptLabel, TapRipple } fro
  * 元動画の時刻(秒) → frames(30fps) は SRC() で書く。
  *
  * cut-ai.mp4 の出来事:  追加 11.8 / 17.3 / 27.4、並べ替え 41.9、色分け 49.4
- * cut-sync.mp4 の出来事: 4人分のチェック 4.83〜6.86（撮影スクリプトが記録）、3秒後に順次「チェック済み」へ移動
+ * cut-sync.mp4 の出来事: 4人分のチェックを1.9秒間隔（撮影スクリプトが記録）、各3秒後に「チェック済み」へ移動
  */
 export const SRC = (sec: number) => Math.round(sec * 30);
 
 const AI = { start: 10.8, end: 30.0, add1: 11.8, add2: 17.3, add3: 27.4 };
 const ORG = { start: 40.9, end: 52.5, color: 49.4 };
-const SYNC = { start: 4.0, end: 12.0, tap1: 4.8 };
+const SYNC = { start: 4.8, end: 15.5, tap1: 5.6 };
 
 /** 撮影スクリプトが記録した実際のタップ（1タップ目からの秒数）。誰がどこを触ったかを動画に出すのに使う */
 const TAPS = [
-  { off: 0.0, x: 420, y: 275, who: 'あなた', side: 'left' as const },
-  { off: 0.665, x: 1147, y: 755, who: '家族', side: 'right' as const },
-  { off: 1.324, x: 420, y: 371, who: 'あなた', side: 'left' as const },
-  { off: 2.005, x: 1147, y: 851, who: '家族', side: 'right' as const },
+  { off: 0.0, x: 1147, y: 851, who: '家族', side: 'right' as const },
+  { off: 1.922, x: 420, y: 371, who: 'あなた', side: 'left' as const },
+  { off: 3.854, x: 1147, y: 755, who: '家族', side: 'right' as const },
+  { off: 5.768, x: 420, y: 275, who: 'あなた', side: 'left' as const },
 ];
 
 /** 素材の一部を切り出して画面いっぱいに使う（README用の小さい画面向け） */
@@ -141,10 +141,10 @@ export const SceneSync: React.FC<{ rate?: number; caption?: boolean; rect?: Rect
   caption = true,
   rect,
 }) => {
-  const half = Math.round(3.6 * (30 / rate));
+  const half = Math.round(6.4 * (30 / rate));
   // タップ時刻(素材の秒) → このシーン内のフレーム
   const tapFrame = (off: number) => Math.round((SYNC.tap1 + off - SYNC.start) * (30 / rate));
-  const activeFrames = Math.round(1.0 * (30 / rate));
+  const activeFrames = Math.round(1.4 * (30 / rate));
   const framesOf = (side: 'left' | 'right') =>
     TAPS.filter((t) => t.side === side).map((t) => tapFrame(t.off));
 
@@ -162,7 +162,7 @@ export const SceneSync: React.FC<{ rate?: number; caption?: boolean; rect?: Rect
               <Sequence
                 key={i}
                 from={tapFrame(t.off)}
-                durationInFrames={Math.round(0.6 * (30 / rate))}
+                durationInFrames={Math.round(0.7 * (30 / rate))}
                 layout="none"
               >
                 <TapRipple x={t.x} y={t.y} />

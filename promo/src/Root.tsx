@@ -23,11 +23,11 @@ const XPromo: React.FC = () => (
       <SceneOrganize />
     </Sequence>
 
-    <Sequence from={581} durationInFrames={209}>
+    <Sequence from={581} durationInFrames={279}>
       <SceneSync />
     </Sequence>
 
-    <Sequence from={790} durationInFrames={130}>
+    <Sequence from={860} durationInFrames={120}>
       <CardScreen
         title={<>Shared Todo</>}
         sub={
@@ -75,11 +75,11 @@ const FullDemo: React.FC = () => (
       <SceneOrganize rate={1} />
     </Sequence>
 
-    <Sequence from={1014} durationInFrames={240}>
+    <Sequence from={1014} durationInFrames={321}>
       <SceneSync rate={1} />
     </Sequence>
 
-    <Sequence from={1254} durationInFrames={132}>
+    <Sequence from={1335} durationInFrames={132}>
       <CardScreen
         title={<>誰でもすぐ使えます</>}
         sub={
@@ -97,9 +97,9 @@ const FullDemo: React.FC = () => (
 
 export const RemotionRoot: React.FC = () => (
   <>
-    <Composition id="XPromo" component={XPromo} durationInFrames={920} fps={30} width={1920} height={1080} />
+    <Composition id="XPromo" component={XPromo} durationInFrames={980} fps={30} width={1920} height={1080} />
     <Composition id="ReadmeAI" component={ReadmeAI} durationInFrames={303} fps={30} width={640} height={960} />
-    <Composition id="ReadmeSync" component={ReadmeSync} durationInFrames={209} fps={30} width={1280} height={960} />
-    <Composition id="FullDemo" component={FullDemo} durationInFrames={1386} fps={30} width={1920} height={1080} />
+    <Composition id="ReadmeSync" component={ReadmeSync} durationInFrames={279} fps={30} width={1280} height={960} />
+    <Composition id="FullDemo" component={FullDemo} durationInFrames={1467} fps={30} width={1920} height={1080} />
   </>
 );
