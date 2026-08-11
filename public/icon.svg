@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Shared Todo">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3b8bff" />
+      <stop offset="1" stop-color="#1558b8" />
+    </linearGradient>
+  </defs>
+
+  <!-- 角丸の下地。iOSのホーム画面では透過が使えないので全面を塗る -->
+  <rect width="512" height="512" rx="114" fill="url(#bg)" />
+
+  <!-- チェックボックス。小さく表示されたときは「四角＋チェック」の輪郭だけが残る -->
+  <rect
+    x="118" y="118" width="276" height="276" rx="66"
+    fill="none" stroke="#ffffff" stroke-opacity="0.55" stroke-width="26"
+  />
+
+  <!-- チェック。枠から少しはみ出させて、押した瞬間の勢いを出す -->
+  <path
+    d="M168 262 L232 326 L360 172"
+    fill="none" stroke="#ffffff" stroke-width="52"
+    stroke-linecap="round" stroke-linejoin="round"
+  />
+</svg>
