@@ -82,7 +82,7 @@ function ItemRow({
   const [draft, setDraft] = useState(item.text);
   const [showPalette, setShowPalette] = useState(false);
   const focusedRef = useRef(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const draftRef = useRef(draft);
   draftRef.current = draft;
@@ -98,6 +98,14 @@ function ItemRow({
       onFocused();
     }
   }, [focusRequested, onFocused]);
+
+  // 折り返した行数に合わせて高さを追従させる
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [draft]);
 
   function commit() {
     clearTimeout(timerRef.current);
@@ -143,9 +151,10 @@ function ItemRow({
           send({ type: 'set_checked', itemId: item.id, checked: e.target.checked, clientOpId: crypto.randomUUID() })
         }
       />
-      <input
+      <textarea
         ref={inputRef}
         className="item-input"
+        rows={1}
         value={draft}
         placeholder=""
         enterKeyHint="enter"
@@ -168,7 +177,7 @@ function ItemRow({
             e.preventDefault();
             onBackspaceEmpty(item);
           } else if (e.key === 'Escape') {
-            (e.target as HTMLInputElement).blur();
+            (e.target as HTMLTextAreaElement).blur();
           }
         }}
       />
